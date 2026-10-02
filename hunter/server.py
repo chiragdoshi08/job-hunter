@@ -12,6 +12,7 @@ RUNNER=None
 AGENT=None
 LOGIN_PROCESS=None
 NOTIFIER=None
+DOCUMENTS=None
 BOOTSTRAP={}
 CSRF=secrets.token_urlsafe(32)
 PORT=8766
@@ -168,6 +169,13 @@ class Handler(BaseHTTPRequestHandler):
                 db.set_setting('execution_mode',b['mode']);return self.send(200,{'ok':True})
             if i not in db.IDENTITIES:raise ValueError('Choose a role first')
             if action=='resume-import':return self.send(200,onboarding.import_resume(i,b))
+            if action=='capture-native-profile':
+                id=db.enqueue(i,'refresh_profile');t=desktop.task(i,id)
+                if t['state'] in ('waiting_user','paused'):db.task_update(i,id,state='waiting_agent',progress='Waiting to capture the connected native master')
+                with db.tx(i) as c:
+                    payload=db.unpack(t['payload'],{});payload['execution_mode']='local_agent';c.execute('UPDATE tasks SET payload=? WHERE id=?',(db.dump(payload),id))
+                db.set_setting('paused',False)
+                return self.send(200,{'task':id})
             if action=='start':return self.send(200,goals.start(i,b))
             if action=='stop':
                 goal=db.get_setting('agent_goal',{},i);goal['enabled']=False;db.set_setting('agent_goal',goal,i)
@@ -388,7 +396,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.error('Not found',404)
 
 def serve(port=8766):
-    global RUNNER,AGENT,PORT,FIXTURE,NOTIFIER
+    global RUNNER,AGENT,PORT,FIXTURE,NOTIFIER,DOCUMENTS
     os.umask(0o077);db.DATA.mkdir(parents=True,exist_ok=True,mode=0o700)
     service_lock=(db.DATA/'service.lock').open('a')
     try:
@@ -422,14 +430,16 @@ def serve(port=8766):
             time.sleep(.1)
     threading.Thread(target=link_loop,daemon=True).start()
     RUNNER=Runner();RUNNER.start()
-    from .agent import AgentRunner
+    from .agent import AgentRunner,DocumentRunner
     AGENT=AgentRunner();AGENT.start()
+    DOCUMENTS=DocumentRunner();DOCUMENTS.start()
     NOTIFIER=notifications.Notifier();NOTIFIER.start()
     def shutdown(*_):
-        AGENT.stop();RUNNER.stop();NOTIFIER.stop()
+        AGENT.stop();DOCUMENTS.stop();RUNNER.stop();NOTIFIER.stop()
         # Let the browser worker restore an account-wide résumé before closing.
         def finish_shutdown():
             if AGENT.thread:AGENT.thread.join(timeout=90)
+            if DOCUMENTS.thread:DOCUMENTS.thread.join(timeout=10)
             threading.Thread(target=s.shutdown,daemon=True).start()
         threading.Thread(target=finish_shutdown,daemon=True).start()
     signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)

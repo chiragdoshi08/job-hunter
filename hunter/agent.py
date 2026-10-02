@@ -102,7 +102,7 @@ class AgentRunner:
                 if db.get_setting('execution_mode')=='local_agent' and not db.get_setting('paused',False):
                     found=False
                     for i in db.IDENTITIES:
-                        t=db.one("SELECT * FROM tasks WHERE state='waiting_agent' AND kind IN ('scan_form','fill','submit','verify','prepare') AND coalesce(json_extract(payload,'$.execution_mode'),'local_agent')!='desktop' ORDER BY created_at LIMIT 1",identity=i)
+                        t=db.one("SELECT * FROM tasks WHERE state='waiting_agent' AND kind IN ('scan_form','fill','submit','verify') AND coalesce(json_extract(payload,'$.execution_mode'),'local_agent')!='desktop' ORDER BY created_at LIMIT 1",identity=i)
                         if t:self.run(i,t);found=True;break
                     if found:continue
                 self.stop_event.wait(.5)
@@ -115,6 +115,10 @@ class AgentRunner:
         owner='local-agent';obs=None;resume_transaction=None
         try:
             desktop.claim(i,t['id'],owner);ctx=desktop.context(i,t['id'])
+            if t['kind']=='refresh_profile':
+                from .native_cv import refresh_profile
+                profile=refresh_profile(i,lambda:self.cancelled(i,t['id']))
+                desktop.finish(i,t['id'],owner,{'evidence':{'profile_id':profile['id'],'source_revision':profile['revision']},'message':'Native master profile captured; source unchanged'});return
             if t['kind']=='prepare':
                 if db.get_setting('cv_template_id',None,i):
                     from .native_cv import prepare
@@ -239,3 +243,14 @@ class AgentRunner:
     def event(self,i,t,event):
         if event.get('type')=='thread.started':db.task_update(i,t['id'],thread_id=event.get('thread_id'),model=db.get_setting('model'))
         if event.get('type')=='turn.started':db.task_update(i,t['id'],progress='Agent is choosing the next step from the observed browser page')
+
+class DocumentRunner(AgentRunner):
+    """Native document work never occupies the browser handover thread."""
+    def loop(self):
+        while not self.stop_event.is_set():
+            found=False
+            if db.get_setting('execution_mode')=='local_agent' and not db.get_setting('paused',False):
+                for identity in db.IDENTITIES:
+                    task=db.one("SELECT * FROM tasks WHERE state='waiting_agent' AND kind IN ('prepare','refresh_profile') AND coalesce(json_extract(payload,'$.execution_mode'),'local_agent')!='desktop' ORDER BY created_at LIMIT 1",identity=identity)
+                    if task:self.run(identity,task);found=True;break
+            if not found:self.stop_event.wait(.5)

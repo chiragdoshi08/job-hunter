@@ -14,6 +14,10 @@ class Drive:
         self.process=subprocess.Popen([codex_binary(),'app-server','-c','features.apps=true','-c','features.plugins=true','-c','features.shell_tool=false'],
           stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.DEVNULL,text=True,env=clean_env(),cwd=db.DATA)
         self.lines=EventLines(self.process.stdout)
+        try:return self.connect()
+        except BaseException:
+            self.__exit__();raise
+    def connect(self):
         self.request('initialize',{'clientInfo':{'name':'job_hunter','title':'Job Hunter','version':'0.3.0'},'capabilities':{'experimentalApi':True}})
         self.send({'method':'initialized','params':{}})
         apps=self.request('app/installed',{'forceRefresh':True}).get('apps',[])
