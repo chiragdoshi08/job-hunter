@@ -80,6 +80,14 @@ class AgentTests(unittest.TestCase):
         adapters.enable({'site':'jobs.lever.co','reviewed':True,'confirmation_text':'Your application has been received'})
         obs=dict(url='https://elsewhere.example/receipt',text='Your application has been received',elements=[])
         self.assertIsNone(adapters.confirmation(obs,db.get_job('strategy',self.job)))
+    def test_verify_resolves_uncertain_receipt_without_clicking_or_model(self):
+        self.prepare();db.approve('strategy',self.app['id'],'submit');attempt=db.begin_submission('strategy',self.app['id'])
+        db.submission_result('strategy',self.app['id'],attempt,'uncertain',{'observed_at':db.now(),'url':db.get_job('strategy',self.job)['url'],'observation':'Receipt delayed'})
+        adapters.enable({'site':'jobs.lever.co','reviewed':True,'confirmation_text':'Your application has been received'})
+        b=FakeBrowser(text='Your application has been received');t=self.task('verify')
+        self.runner(b,lambda *a,**k:self.fail('Verification must not ask the model to click')).run('strategy',desktop.task('strategy',t))
+        self.assertEqual(db.application('strategy',self.app['id'])['state'],'submitted');self.assertEqual(b.calls,[])
+        self.assertEqual(desktop.task('strategy',t)['state'],'completed')
     def test_repeat_labels_block_instead_of_conflating_employers(self):
         with self.assertRaisesRegex(ValueError,'repeats'):agent.observed_fields(FakeBrowser([element(1,'Company'),element(2,'Company')]).observe())
     def test_radio_and_consent_capture_choices(self):

@@ -29,7 +29,7 @@ read '?Press Enter to close…'
 '''
     for name,text in (('Stop Job Hunter.command',stop),('Restore Job Hunter.command',restore)):
         f=folder/name;f.write_text(text);f.chmod(0o755)
-    (folder/'START HERE.txt').write_text('''Job Hunter 0.2.0 preview — Apple Silicon Mac
+    (folder/'START HERE.txt').write_text('''Job Hunter 0.3.0 — Apple Silicon Mac
 
 Open Job Hunter.app. In Agent setup, sign in with ChatGPT, check the connection,
 upload your reviewed résumé PDF, save job preferences, and check browser/upload.
@@ -43,8 +43,10 @@ This is an unsigned-by-Apple preview with an ad hoc verified signature.
 If blocked, use macOS Privacy & Security > Open Anyway after verifying the
 published checksum. Do not disable system security globally.
 
-Generic employer automation is not certified. Native Google Docs tailoring
-uses the connected Codex desktop workflow; uploaded PDFs stay unchanged.
+Individual employer workflows still require testing. Native Google Docs CVs
+run automatically after you connect Drive and select a master and template.
+Uploaded baseline PDFs stay unchanged. Optional Android ntfy alerts can be
+enabled in Agent setup; keep your private topic secret.
 No candidate data is included. Private data stays in your Application Support
 folder. Back up from Settings before changing computers or upgrading.
 

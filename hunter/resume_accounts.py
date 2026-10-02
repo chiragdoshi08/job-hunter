@@ -55,7 +55,7 @@ def begin(identity,application_id,url,replacement,backend):
     replacement_hash=pdf_hash(replacement);id=db.uid();folder=db.DATA/'account_resumes'/id;folder.mkdir(parents=True,mode=0o700)
     original=folder/'original.pdf';backend.download(config,original);original_hash=pdf_hash(original);os.chmod(original,0o400)
     with db.tx() as c:c.execute('INSERT INTO resume_transactions VALUES(?,?,?,?,?,?,?,?,?,?,?)',
-       (id,site,identity,application_id,'saved',str(original.relative_to(db.DATA)),original_hash,replacement_hash,db.now(),db.now(),None))
+       (id,site,identity,application_id,'saved',original.relative_to(db.DATA).as_posix(),original_hash,replacement_hash,db.now(),db.now(),None))
     transaction=db.one('SELECT * FROM resume_transactions WHERE id=?',(id,))
     try:
         # A crash from this point is conservatively treated as a changed account.

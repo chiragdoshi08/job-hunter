@@ -74,6 +74,35 @@ class WorkflowTests(unittest.TestCase):
         edit['run']='other:9'
         with self.assertRaisesRegex(ValueError,'unknown'):native_cv.requests_for(doc,plan,edit['evidence'],'strategy_two_pages')
         with self.assertRaisesRegex(ValueError,'one-page'):native_cv.requests_for(doc,{'edits':[],'remove_bullets':['t.0:1']},edit['evidence'],'strategy_two_pages')
+    def test_native_default_style_omissions_are_equivalent_but_font_changes_fail(self):
+        doc=self.doc();run=doc['tabs'][0]['body']['content'][0]['paragraph']['elements'][0]['textRun']
+        run['textStyle'].update(bold=False,italic=False,baselineOffset='NONE')
+        after=copy.deepcopy(doc);style=after['tabs'][0]['body']['content'][0]['paragraph']['elements'][0]['textRun']['textStyle']
+        for key in ('bold','italic','baselineOffset'):style.pop(key)
+        plan={'edits':[],'remove_bullets':[]}
+        self.assertTrue(native_cv.verify_preserved(doc,after,plan))
+        style['weightedFontFamily']['fontFamily']='Arial'
+        with self.assertRaisesRegex(ValueError,'styling'):native_cv.verify_preserved(doc,after,plan)
+    def test_native_evidence_matches_source_paragraph_whitespace_without_paraphrasing(self):
+        doc=self.doc();profile='Led operations with\n\nverified process improvements.'
+        edit={'run':'t.0:1','text':'Led verified operations and process improvements.','evidence':'“Led operations with verified process improvements.”'}
+        plan={'edits':[edit],'remove_bullets':[]}
+        native_cv.requests_for(doc,plan,profile,'strategy_two_pages');self.assertEqual(edit['evidence'],profile)
+        edit['evidence']='Led operations with invented process improvements.'
+        with self.assertRaisesRegex(ValueError,'supporting quote'):native_cv.requests_for(doc,plan,profile,'strategy_two_pages')
+    def test_native_fragment_deletion_cannot_empty_a_bullet(self):
+        doc=self.doc();paragraph=doc['tabs'][0]['body']['content'][0]['paragraph'];original=paragraph['elements'][0]
+        original['textRun']['content']=original['textRun']['content'].rstrip('\n')
+        fragment=copy.deepcopy(original);fragment['startIndex']=50;fragment['textRun']['content']='Additional verified detail.\n';paragraph['elements'].append(fragment)
+        evidence='Led operations with verified process improvements.'
+        plan={'edits':[{'run':'t.0:1','text':'','evidence':evidence}],'remove_bullets':[]}
+        requests=native_cv.requests_for(doc,plan,evidence,'strategy_two_pages')
+        self.assertFalse(any('updateTextStyle' in r for r in requests))
+        self.assertFalse(any('insertText' in r for r in requests))
+        after=copy.deepcopy(doc);after['tabs'][0]['body']['content'][0]['paragraph']['elements'].pop(0)
+        self.assertTrue(native_cv.verify_preserved(doc,after,plan))
+        plan['edits'].append({'run':'t.0:50','text':'','evidence':evidence})
+        with self.assertRaisesRegex(ValueError,'empty'):native_cv.requests_for(doc,plan,evidence,'strategy_two_pages')
     def test_native_pdf_renderer_exports_every_page(self):
         path=db.ROOT/'fixture.pdf';path.write_bytes(pdf_bytes());images=native_cv.render(path,db.ROOT)
         self.assertEqual(len(images),1);self.assertTrue(images[0].read_bytes().startswith(b'\x89PNG'))

@@ -26,6 +26,8 @@ def claim(i,id,owner):
                 host=urlsplit(j['url']).hostname
                 from .resume_accounts import account_site
                 account=account_site(j['url'])
+                from .resume_accounts import pending
+                if pending(account):raise ValueError('Restore the saved original résumé for this account before using another application task')
                 acc=db.one('SELECT * FROM accounts WHERE site IN (?,?) AND paused=1',(host,account))
                 if acc and acc['paused']:raise ValueError('This job-site account is paused: '+str(acc['reason']))
                 # Shared browser is deliberately serialised, including account-level resume state.
@@ -141,7 +143,7 @@ def register_document(i,id,owner,meta,file):
     did=db.uid();relative=Path('documents')/a['id']/(did+'.pdf');dest=db.DATA/i/relative;dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700);shutil.copyfile(file,dest);os.chmod(dest,0o400)
     with db.tx(i) as c:
         v=c.execute('SELECT coalesce(max(version),0)+1 FROM documents WHERE application_id=? AND kind=?',(a['id'],meta['kind'])).fetchone()[0]
-        c.execute('INSERT INTO documents VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(did,a['id'],meta['kind'],v,meta['drive_id'],url,meta.get('drive_revision'),str(relative),h,meta['profile_id'],meta['job_hash'],meta.get('changes',''),db.now(),db.dump(meta['verification']),db.now()))
+        c.execute('INSERT INTO documents VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(did,a['id'],meta['kind'],v,meta['drive_id'],url,meta.get('drive_revision'),relative.as_posix(),h,meta['profile_id'],meta['job_hash'],meta.get('changes',''),db.now(),db.dump(meta['verification']),db.now()))
         selected=db.unpack(c.execute('SELECT selected_documents FROM applications WHERE id=?',(a['id'],)).fetchone()[0],[])
         selected=[x for x in selected if not c.execute('SELECT id FROM documents WHERE id=? AND kind=?',(x,meta['kind'])).fetchone()]+[did]
         c.execute("UPDATE applications SET selected_documents=?,document_state=CASE WHEN ?='cv' THEN 'prepared' ELSE document_state END,approval_id=NULL,updated_at=? WHERE id=?",(db.dump(selected),meta['kind'],db.now(),a['id']))

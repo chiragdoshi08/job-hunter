@@ -127,6 +127,7 @@ class AgentRunner:
                 else:
                     onboarding.baseline_document(i,t['id'],owner)
                     message='Original reviewed résumé saved for this application; ready to scan the form'
+                with db.tx(i) as c:c.execute("UPDATE applications SET state='review',updated_at=? WHERE id=? AND state!='submitted'",(db.now(),t['application_id']))
                 db.task_update(i,t['id'],state='completed',lease_until=None,progress=message,result={'evidence':'Fixed reviewed PDF registered for this application'})
                 db.enqueue(i,'scan_form',t['job_id'],application_id=t['application_id']);return
             cp=db.unpack(t['checkpoint'],{})
@@ -152,6 +153,7 @@ class AgentRunner:
                         evidence={'observed_at':db.now(),'url':obs['url'],'observation':'Employer receipt re-checked in the live browser','confirmation_text':receipt}
                         db.submission_result(i,t['application_id'],attempt['id'],'confirmed',evidence)
                         desktop.finish(i,t['id'],owner,{'evidence':evidence,'message':'Employer receipt verified; application recorded as submitted'});return
+                    self.block(i,t,owner,'verification','A reliable employer receipt is not visible. Open the saved browser page and check the application status before another attempt.',obs);return
                 fields=capture(i,t,obs)
                 if t['kind']=='scan_form' and fields and adapters.application_form(obs):
                     unknown=next((e for e in obs['elements'] if e['type']=='combobox' and not e['choices']),None)
@@ -215,14 +217,20 @@ class AgentRunner:
                     fill=db.one("SELECT result FROM tasks WHERE application_id=? AND kind='fill' AND state='completed' ORDER BY updated_at DESC LIMIT 1",(t['application_id'],),i)
                     if not fill or db.unpack(fill['result'],{}).get('evidence',{}).get('manifest_hash')!=db.digest(db.manifest(i,t['application_id'])):raise ValueError('Fill and verify this exact reviewed application before submitting.')
                     attempt=db.begin_submission(i,t['application_id'])
-                    try:obs=self.browser.act(obs,decision['element'],'click')
+                    try:
+                        obs=self.browser.act(obs,decision['element'],'click')
+                        for _ in range(20):
+                            if adapters.confirmation(obs,ctx['job']) or self.cancelled(i,t['id']):break
+                            time.sleep(.25);obs=self.browser.observe()
                     finally:
                         if attempt:
                             receipt=adapters.confirmation(obs,ctx['job'])
                             evidence={'observed_at':db.now(),'url':obs['url'],'observation':receipt or 'Final action attempted; a reliable employer receipt was not observed.'}
                             if receipt:evidence['confirmation_text']=receipt
                             db.submission_result(i,t['application_id'],attempt,'confirmed' if receipt else 'uncertain',evidence)
-                    db.task_update(i,t['id'],state='completed' if receipt else 'waiting_user',lease_until=None,progress='Employer confirmation recorded' if receipt else 'Submission needs verification; do not click Submit again',result=evidence);return
+                    db.task_update(i,t['id'],state='completed' if receipt else 'waiting_user',lease_until=None,progress='Employer confirmation recorded' if receipt else 'Submission needs verification; do not click Submit again',result=evidence)
+                    if not receipt:db.enqueue(i,'verify',t['job_id'],application_id=t['application_id'])
+                    return
                 obs=self.act(obs,decision['element'],'click')
             self.block(i,t,owner,'site','The agent reached its step limit. Inspect the saved browser page, then resume.',obs)
         except model.Cancelled:pass

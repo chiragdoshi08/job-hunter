@@ -1,3 +1,19 @@
+# 0.3.0
+
+- Run native Google Docs CV preparation and master-profile capture directly through the connected Drive app.
+- Preserve template geometry and text styles, audit edited facts, verify page policy and visually inspect exported pages; checkpoint interrupted work and repair rejected plans.
+- Run document work independently so a CV does not occupy the browser handover worker.
+- Start saved native tasks locally from the existing application, without requiring a new chat.
+- Capture hidden résumé inputs and custom dropdown choices; distinguish a job-search field from an application form.
+- Re-check delayed employer receipts and resolve uncertain attempts without clicking Submit again.
+- Journal account-wide résumé changes, verify exact replacement bytes, restore the saved original and expose recovery after failure or restart.
+- Add optional, deduplicated ntfy phone alerts with durable retries and generic private messages.
+- Build a Windows installer with bundled Python, Codex, Chromium and PDF renderer; test launch, upload, stop, silent install and uninstall on Windows.
+- Fix Windows subprocess output, portable backup paths, private data ACLs and detached service shutdown.
+- Add Apple notarization tooling; actual notarization still requires a Developer ID certificate.
+
+Individual employer and job-board workflows are not universally certified. Login, MFA, CAPTCHA and unknown answers can still require the user.
+
 # 0.2.0-preview
 
 - Replace the mandatory browser-task chat handoff with a local observe/decide/act worker.

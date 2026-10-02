@@ -175,6 +175,7 @@ class Handler(BaseHTTPRequestHandler):
                 with db.tx(i) as c:
                     payload=db.unpack(t['payload'],{});payload['execution_mode']='local_agent';c.execute('UPDATE tasks SET payload=? WHERE id=?',(db.dump(payload),id))
                 db.set_setting('paused',False)
+                db.set_setting('execution_mode','local_agent')
                 return self.send(200,{'task':id})
             if action=='start':return self.send(200,goals.start(i,b))
             if action=='stop':
@@ -260,13 +261,23 @@ class Handler(BaseHTTPRequestHandler):
         i=parts[1];action=parts[2]
         if action=='launch-desktop':
             task=desktop.task(i,b['id'])
+            if b.get('mode')=='local_agent':
+                if task['state'] not in ('waiting_agent','waiting_user','paused'):raise ValueError('This task cannot be resumed while another worker owns it')
+                if task['kind'] not in ('prepare','refresh_profile','fill','submit','verify','scan_form'):raise ValueError('This task needs the connected desktop workflow')
+                if task['application_id'] and db.application(i,task['application_id'])['state']=='submitted':raise ValueError('This application is already confirmed submitted')
+                payload=db.unpack(task['payload'],{});payload['execution_mode']='local_agent'
+                with db.tx(i) as c:c.execute("UPDATE tasks SET payload=?,state='waiting_agent',owner=NULL,lease_until=NULL,error=NULL WHERE id=?",(db.dump(payload),task['id']))
+                db.set_setting('execution_mode','local_agent');db.set_setting('paused',False);task=desktop.task(i,task['id'])
             if b.get('mode')=='desktop':
                 if task['state'] not in ('waiting_agent','waiting_user','paused'):raise ValueError('This task cannot be handed over while another worker owns it')
                 payload=db.unpack(task['payload'],{});payload['execution_mode']='desktop'
                 with db.tx(i) as c:c.execute("UPDATE tasks SET payload=?,state='waiting_agent',owner=NULL,lease_until=NULL WHERE id=?",(db.dump(payload),task['id']))
                 task=desktop.task(i,task['id'])
-            if db.get_setting('execution_mode')=='local_agent' and b.get('mode')!='desktop':
+            if db.get_setting('execution_mode')=='local_agent' and b.get('mode')!='desktop' and task['kind'] not in ('web_discovery','import_answers'):
                 if task['state'] not in ('waiting_agent','working','completed','waiting_user'):raise ValueError('Resume the task before starting it')
+                if task['state']=='waiting_agent':
+                    payload=db.unpack(task['payload'],{});payload['execution_mode']='local_agent'
+                    with db.tx(i) as c:c.execute('UPDATE tasks SET payload=? WHERE id=?',(db.dump(payload),task['id']))
                 return self.send(200,{'started':True,'mode':'local_agent','state':task['state']})
             if task['kind'] not in desktop.DESKTOP_KINDS or task['state']!='waiting_agent':
                 raise ValueError('This desktop task is not waiting to start')

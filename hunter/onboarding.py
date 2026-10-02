@@ -31,7 +31,7 @@ def import_resume(identity,data):
         profile=db.capture_profile(identity,{'document_id':source,'captured_at':db.now(),'text':text})
     folder=db.DATA/identity/'profile_files';folder.mkdir(parents=True,exist_ok=True,mode=0o700)
     sha=hashlib.sha256(raw).hexdigest();path=folder/(sha+'.pdf');path.write_bytes(raw);os.chmod(path,0o400)
-    baseline={'path':str(path.relative_to(db.DATA/identity)),'sha256':sha,'name':name,'profile_id':profile['id'],'pages':len(reader.pages),'reviewed_at':db.now(),'policy':'use_original'}
+    baseline={'path':path.relative_to(db.DATA/identity).as_posix(),'sha256':sha,'name':name,'profile_id':profile['id'],'pages':len(reader.pages),'reviewed_at':db.now(),'policy':'use_original'}
     db.set_setting('baseline_resume',baseline,identity)
     return {'profile_id':profile['id'],'pages':baseline['pages'],'characters':len(text),'name':name}
 
@@ -68,7 +68,7 @@ def baseline_document(identity,task,owner):
     did=db.uid();relative=Path('documents')/t['application_id']/(did+'.pdf');dest=db.DATA/identity/relative;dest.parent.mkdir(parents=True,exist_ok=True,mode=0o700);dest.write_bytes(file.read_bytes());os.chmod(dest,0o400)
     with db.tx(identity) as c:
         version=c.execute("SELECT coalesce(max(version),0)+1 FROM documents WHERE application_id=? AND kind='cv'",(t['application_id'],)).fetchone()[0]
-        c.execute('INSERT INTO documents VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(did,t['application_id'],'cv',version,'local:'+baseline['sha256'],'','uploaded',str(relative),baseline['sha256'],ctx['profile']['id'],ctx['job']['description_hash'],'Original user-reviewed résumé, unchanged; no tailoring claimed.',db.now(),db.dump({'user_reviewed':True,'pages':baseline['pages'],'original_unchanged':True}),db.now()))
+        c.execute('INSERT INTO documents VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',(did,t['application_id'],'cv',version,'local:'+baseline['sha256'],'','uploaded',relative.as_posix(),baseline['sha256'],ctx['profile']['id'],ctx['job']['description_hash'],'Original user-reviewed résumé, unchanged; no tailoring claimed.',db.now(),db.dump({'user_reviewed':True,'pages':baseline['pages'],'original_unchanged':True}),db.now()))
         a=db.application(identity,t['application_id']);selected=[x for x in a['selected_documents'] if not c.execute("SELECT id FROM documents WHERE id=? AND kind='cv'",(x,)).fetchone()]+[did]
         c.execute("UPDATE applications SET selected_documents=?,document_state='prepared',state='review',approval_id=NULL,updated_at=? WHERE id=?",(db.dump(selected),db.now(),t['application_id']))
     return did
