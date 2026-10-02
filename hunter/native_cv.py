@@ -48,10 +48,20 @@ def fingerprint(doc):
         if isinstance(value,dict):return {k:clean(v) for k,v in value.items() if k not in ('startIndex','endIndex','listId')}
         if isinstance(value,list):return [clean(v) for v in value]
         return value
+    def active_lists(tab):
+        used=set()
+        def walk(value):
+            if isinstance(value,dict):
+                if value.get('bullet',{}).get('listId'):used.add(value['bullet']['listId'])
+                for child in value.values():walk(child)
+            elif isinstance(value,list):
+                for child in value:walk(child)
+        walk(tab.get('body',{}));lists=tab.get('lists') or {}
+        return sorted((clean(lists[id]) for id in used if id in lists),key=db.dump)
     return {'style':doc.get('documentStyle'),'namedStyles':doc.get('namedStyles'),
       'tabs':[{'title':t.get('title'),'index':t.get('index'),'parent':t.get('parentTabId'),
                'body':clean(t.get('body')),'headers':clean(t.get('headers')),'footers':clean(t.get('footers')),
-               'inlineObjects':clean(t.get('inlineObjects')),'lists':clean(t.get('lists'))} for t in tabs(doc)]}
+               'inlineObjects':clean(t.get('inlineObjects')),'lists':active_lists(t)} for t in tabs(doc)]}
 
 def requests_for(doc,plan,profile,policy):
     runs,bullets=editable(doc);removals=set(plan['remove_bullets']);seen=set();requests=[]
@@ -142,6 +152,11 @@ def prepare(identity,task,owner,decider=model.decide,cancelled=lambda:False,driv
             saved.update(copy_id=copied,stage='copied');save()
         if not saved.get('copy_id'):raise ValueError('A native copy request was interrupted. Inspect Drive for the task ID before making another copy.')
         copied=saved['copy_id'];drive.mutable.add(copied);doc=drive.get(copied)
+        if saved['stage']=='writing':
+            previous=json.loads((folder/'before.json').read_text())
+            if fingerprint(doc)==fingerprint(previous):
+                requests=requests_for(doc,saved['plan'],ctx['profile']['text'],policy)
+                if requests:drive.update(copied,requests,doc['revisionId'])
         if saved['stage']=='copied':
             source=json.loads((folder/'source.json').read_text())
             if fingerprint(source)!=fingerprint(doc):raise ValueError('The native copy did not preserve the complete template')

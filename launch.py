@@ -8,7 +8,8 @@ from hunter import db
 
 def running():
     try:
-        port=int((db.DATA/'port').read_text());pid=int((db.DATA/'server.pid').read_text());os.kill(pid,0)
+        port=int((db.DATA/'port').read_text());pid=int((db.DATA/'server.pid').read_text())
+        if os.name!='nt':os.kill(pid,0)
         with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(f'http://127.0.0.1:{port}/health',timeout=1) as r:return port if json.load(r).get('service')=='job-hunter' else None
     except Exception:return None
 
@@ -37,10 +38,11 @@ def launch(open_browser=True):
 
 def stop():
     if running():
-        pid=int((db.DATA/'server.pid').read_text());os.kill(pid,signal.SIGTERM)
-        for _ in range(100):
+        (db.DATA/'stop.request').write_text(secrets.token_urlsafe(32))
+        for _ in range(1000):
             if not running():break
             time.sleep(.1)
+        if running():raise RuntimeError('Job Hunter is still restoring a saved résumé or closing its browser. Wait before restarting or restoring a backup.')
         print('Job Hunter stopped. Your progress is saved.')
     else:print('Job Hunter is already stopped.')
 

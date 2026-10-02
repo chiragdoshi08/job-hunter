@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from pathlib import Path
-from hunter import db,desktop,agent,questions,identities,onboarding
+from hunter import db,desktop,agent,questions,identities,onboarding,resume_accounts
 from hunter.browser import Browser
 from tests.helpers import fixture_masters
 
@@ -29,7 +29,17 @@ class BrowserAcceptance(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.old=db.DATA,db.ROOT;db.ROOT=Path(self.tmp.name);db.DATA=db.ROOT/'data';db.init()
         class Handler(BaseHTTPRequestHandler):
-            def do_GET(self):self.send_response(200);self.send_header('Content-Type','text/html');self.end_headers();self.wfile.write(HTML.encode())
+            current_cv=pdf_bytes()
+            def do_GET(self):
+                self.send_response(200)
+                if self.path=='/resume.pdf':
+                    self.send_header('Content-Type','application/pdf');self.send_header('Content-Disposition','attachment; filename="resume.pdf"');self.end_headers();self.wfile.write(type(self).current_cv)
+                else:
+                    self.send_header('Content-Type','text/html');self.end_headers()
+                    html='<a href="/resume.pdf">Download original</a><label>Resume<input type="file" onchange="fetch(\'/resume\',{method:\'POST\',body:this.files[0]})"></label>' if self.path=='/profile' else HTML
+                    self.wfile.write(html.encode())
+            def do_POST(self):
+                type(self).current_cv=self.rfile.read(int(self.headers.get('Content-Length',0)));self.send_response(200);self.end_headers()
             def log_message(self,*args):pass
         self.http=ThreadingHTTPServer(('127.0.0.1',0),Handler);threading.Thread(target=self.http.serve_forever,daemon=True).start()
         self.url=f'http://127.0.0.1:{self.http.server_port}/application';db.set_setting('test_fixture_url',self.url);db.set_setting('fixture_submission_enabled',True)
@@ -73,5 +83,21 @@ class BrowserAcceptance(unittest.TestCase):
     def test_password_values_are_never_observed(self):
         self.browser.start();self.browser.page.set_content('<input type="email" value="private@example.test"><input type="password" value="do-not-observe">')
         obs=self.browser.observe();self.assertTrue(obs['password_present']);self.assertNotIn('do-not-observe',json.dumps(obs));self.assertEqual(obs['elements'],[])
+    def test_hidden_resume_input_remains_uploadable(self):
+        self.browser.start();self.browser.page.set_content('<label>Resume<input type="file" style="display:none"></label>')
+        obs=self.browser.observe();self.assertEqual(obs['elements'][0]['type'],'file')
+        path=db.ROOT/'resume.pdf';path.write_bytes(pdf_bytes());self.browser.act(obs,1,'upload',file=path)
+        self.assertEqual(self.browser.page.locator('input').evaluate('(e)=>e.files[0].name'),'resume.pdf')
+    def test_custom_dropdown_choices_are_observed_before_selection(self):
+        self.browser.start();self.browser.page.set_content('<label id="question">Notice period</label><input role="combobox" aria-labelledby="question" aria-controls="choices"><div id="choices" style="display:none"><div role="option">30 Days</div><div role="option">60 Days</div></div><script>let input=document.querySelector("input"),list=document.querySelector("#choices");input.onclick=()=>list.style.display="block";input.onkeydown=e=>{if(e.key==="Escape")list.style.display="none"};for(let o of list.children)o.onclick=()=>{input.value=o.innerText;list.style.display="none"}</script>')
+        obs=self.browser.read_choices(self.browser.observe(),1);self.assertEqual(obs['elements'][0]['choices'],['30 Days','60 Days'])
+        obs=self.browser.act(obs,1,'select','60 Days');self.assertEqual(obs['elements'][0]['value'],'60 Days')
+    def test_account_resume_restores_original_in_actual_browser(self):
+        profile=self.url.rsplit('/',1)[0]+'/profile';db.set_setting('resume_accounts',{'naukri.com':{'profile_url':profile,'download_label':'Download original','upload_label':'Resume'}})
+        original=self.http.RequestHandlerClass.current_cv;replacement=db.ROOT/'reviewed.pdf';replacement.write_bytes(original+b'\n% Reviewed replacement')
+        self.browser.activate('application',self.url);self.browser.page.locator('input[type=email]').fill('fixture@example.test')
+        backend=resume_accounts.BrowserBackend(self.browser);t=resume_accounts.begin('strategy','fixture','https://naukri.com/job',replacement,backend)
+        self.assertEqual(self.http.RequestHandlerClass.current_cv,replacement.read_bytes());resume_accounts.restore(t,backend)
+        self.assertEqual(self.http.RequestHandlerClass.current_cv,original);self.assertEqual(self.browser.page.locator('input[type=email]').input_value(),'fixture@example.test')
 
 if __name__=='__main__':unittest.main()
