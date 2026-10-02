@@ -20,7 +20,7 @@ def launch(open_browser=True):
         child_env=os.environ.copy()
         if getattr(sys,'frozen',False):child_env['PYINSTALLER_RESET_ENVIRONMENT']='1'
         with (db.DATA/'server.log').open('a') as out:
-            child=subprocess.Popen([sys.executable,'--serve'] if getattr(sys,'frozen',False) else [sys.executable,str(ROOT/'launch.py'),'--serve'],cwd=ROOT,env=child_env,stdout=out,stderr=out,start_new_session=os.name!='nt')
+            child=subprocess.Popen([sys.executable,'--serve'] if getattr(sys,'frozen',False) else [sys.executable,str(ROOT/'launch.py'),'--serve'],cwd=ROOT,env=child_env,stdout=out,stderr=out,start_new_session=os.name!='nt',creationflags=(subprocess.DETACHED_PROCESS|subprocess.CREATE_NEW_PROCESS_GROUP) if os.name=='nt' else 0)
         deadline=time.monotonic()+60
         while time.monotonic()<deadline:
             time.sleep(.1);port=running()

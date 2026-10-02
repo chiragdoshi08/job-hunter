@@ -52,7 +52,7 @@ class IdentitySetupTests(unittest.TestCase):
   token=browser_sessions.issue();self.assertTrue(browser_sessions.valid(token));stored=(db.DATA/'browser-sessions.json').read_text();self.assertNotIn(token,stored)
   importlib.reload(browser_sessions);self.assertTrue(browser_sessions.valid(token));self.assertFalse(browser_sessions.valid('wrong-session-token'))
   browser_sessions.register('expired-fixture-token',time.time()-1);self.assertFalse(browser_sessions.valid('expired-fixture-token'))
-  self.assertEqual((db.DATA/'browser-sessions.json').stat().st_mode&0o777,0o600)
+  if __import__('os').name!='nt':self.assertEqual((db.DATA/'browser-sessions.json').stat().st_mode&0o777,0o600)
   with zipfile.ZipFile(backup.create_backup()) as z:self.assertFalse(any('session' in n for n in z.namelist()))
  def test_browser_connections_do_not_collide_between_live_and_test_installations(self):
   original=db.DATA;live_name=browser_sessions.cookie_name();token=browser_sessions.issue()

@@ -86,6 +86,8 @@ CREATE TABLE IF NOT EXISTS pursuit(vacancy_key TEXT NOT NULL,identity TEXT NOT N
 
 def init():
     DATA.mkdir(parents=True,exist_ok=True,mode=0o700)
+    from .paths import secure_data
+    secure_data(DATA)
     with contextlib.closing(connect()) as c:
         c.executescript(SHARED); c.execute('INSERT OR IGNORE INTO migrations VALUES(1,?)',(now(),)); c.commit()
     from . import identities,sharing,reviews,notifications,resume_accounts

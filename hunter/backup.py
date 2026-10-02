@@ -16,7 +16,7 @@ def create_backup():
                 if folder.exists():shutil.copytree(folder,stage/i/category)
         if (db.DATA/'account_resumes').exists():shutil.copytree(db.DATA/'account_resumes',stage/'account_resumes')
         for p in stage.rglob('*'):
-            if p.is_file():files[str(p.relative_to(stage))]=hashlib.sha256(p.read_bytes()).hexdigest()
+            if p.is_file():files[p.relative_to(stage).as_posix()]=hashlib.sha256(p.read_bytes()).hexdigest()
         (stage/'manifest.json').write_text(db.dump({'version':1,'created_at':db.now(),'identities':list(db.IDENTITIES),'files':files}))
         with zipfile.ZipFile(target,'w',zipfile.ZIP_DEFLATED) as z:
             for p in stage.rglob('*'):
