@@ -12,4 +12,6 @@ No real employer application was submitted during validation. Employer-specific 
 
 The packaged Apple Silicon app launched with empty isolated data. Its own API verified ChatGPT authentication, a real structured model response using the bundled official Codex CLI, and a real local upload using bundled Chromium. Its code signature was verified as valid ad hoc; the app is not Apple-notarized. Desktop and 390px phone layouts had no page errors or horizontal overflow.
 
+The final bundle's installed CLI, independent service launch, fresh empty role profiles and stop command also passed. Detached service startup resets the frozen runtime environment as required by [PyInstaller's subprocess guidance](https://pyinstaller.org/en/stable/common-issues-and-pitfalls.html#using-sys-executable-to-spawn-subprocesses-that-outlive-the-application-process-implementing-application-restart).
+
 A read-only inspection of a live Lever employer application captured its visible questions, including custom compensation and notice-period fields. No private candidate data was entered and no employer application was submitted. This establishes scanner behavior on that page, not complete platform certification.

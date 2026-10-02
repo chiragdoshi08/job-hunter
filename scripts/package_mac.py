@@ -51,6 +51,7 @@ folder. Back up from Settings before changing computers or upgrading.
 Source, instructions and limitations: https://github.com/chiragdoshi08/job-hunter
 ''')
     shutil.copy2(Path(__file__).resolve().parents[1]/'THIRD-PARTY-NOTICES.md',folder/'THIRD-PARTY-NOTICES.md')
+    shutil.copy2(Path(__file__).resolve().parents[1]/'LICENSE',folder/'LICENSE')
     subprocess.run(['codesign','--verify','--deep','--strict',str(folder/'Job Hunter.app')],check=True)
     subprocess.run(['ditto','-c','-k','--sequesterRsrc','--keepParent',str(folder),str(output)],check=True)
 print(output)
