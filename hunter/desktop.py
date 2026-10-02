@@ -37,7 +37,7 @@ def claim(i,id,owner):
         current=dict(c.execute('SELECT * FROM tasks WHERE id=?',(id,)).fetchone())
         if current['state'] not in ('waiting_agent','working') or (current['state']=='working' and current['owner']!=owner and (current['lease_until'] or 0)>time.time()):
             db.release(key);raise ValueError('Another worker claimed or paused this task')
-        c.execute("UPDATE tasks SET state='working',owner=?,lease_until=?,progress=?,updated_at=? WHERE id=?",(owner,time.time()+1800,'Desktop agent claimed this task; awaiting observed work',db.now(),id))
+        c.execute("UPDATE tasks SET state='working',owner=?,lease_until=?,progress=?,updated_at=? WHERE id=?",(owner,time.time()+1800,'Agent started this task; preparing the next step',db.now(),id))
     with db.tx(i) as c:db.log(c,'Desktop task claimed',owner,t['job_id'],id)
     return context(i,id)
 
