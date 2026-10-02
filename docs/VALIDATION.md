@@ -1,6 +1,6 @@
 # Validation
 
-On 2 October 2026, the regression suite passed on Apple Silicon with Python 3.14.4, Playwright 1.63.0, pypdf 6.19.0 and pypdfium2 5.13.0. The suite includes nine real browser tests. The final suite also covers native default-style normalization, source-quote whitespace, safe fragment deletion and uncertain receipt recovery.
+On 2 October 2026, 173 regression tests passed on Apple Silicon with Python 3.14.4, Playwright 1.63.0, pypdf 6.19.0 and pypdfium2 5.13.0. The suite includes 10 real browser tests. The final suite also covers native default-style normalization, source-quote whitespace, safe fragment deletion and uncertain receipt recovery.
 
 Verified acceptance flow: import synthetic résumé → immutable profile/PDF → prepare → capture questions → review answers → approve fill → upload exact PDF → approve submit → reserve one attempt → observe configured employer receipt → Submitted → reject duplicate submission.
 
@@ -10,7 +10,7 @@ Real browser coverage also includes separate application pages, stale DOM, reada
 
 The official app-server connected to the existing Google Drive app. A full native template copy was edited through revision-controlled requests, preserving page geometry, paragraph styles, bullet lists and local text styling. Edited claims were audited against a fixed captured profile. A real Strategy CV passed the two-page/lower-content PDF gate and visual inspection of both rendered pages. The source template was never edited. Rejected evidence, provider requests and underfilled layouts exposed real defects that were corrected and retained as regression coverage.
 
-The one-page AI policy is independently enforced. A rejected factual or layout check cannot register a prepared document. Native document work runs separately from the browser worker and saves the copy, plan and revision checkpoints.
+A real AI CV also passed the one-page A4 gate and visual inspection. Testing exposed Google Docs’ protected final newline and bullet-font inheritance; both were repaired. The one-page AI policy is independently enforced. A rejected factual or layout check cannot register a prepared document. Native document work runs separately from the browser worker and saves the copy, plan and revision checkpoints.
 
 ## Installers
 
@@ -20,6 +20,6 @@ The Apple Silicon app is built with bundled Codex, Python, Chromium and PDF rend
 
 ## Practical limits
 
-A live Lever form was inspected read-only and its candidate questions captured. This proves scanning on that page, not complete platform certification. No actual employer application is submitted as a release test. Original account résumé restoration is browser-fixture tested; each real account requires reviewed controls. Android delivery requires the user to subscribe and allow notifications; no phone topic was enabled without that choice.
+Live Lever, Greenhouse and Ashby forms were inspected read-only and their candidate questions captured. Greenhouse’s hidden validation input was being mistaken for a second country question; it is now excluded, and the selected React dropdown value is read from its visible label. A visible CAPTCHA on that page still requires human completion. This proves scanning on that page, not complete platform certification. No actual employer application is submitted as a release test. Original account résumé restoration is browser-fixture tested; each real account requires reviewed controls. Android delivery requires the user to subscribe and allow notifications; no phone topic was enabled without that choice.
 
-Before upgrading the existing installation, code and private data are backed up. Tracker counts are compared after migration; historical approvals do not automatically authorize new submissions.
+The existing installation was backed up and upgraded. All 171 jobs, 26 applications, 24 historical documents, 188 answers and three profiles were preserved. Both roles passed all-screen UI checks with no page errors and no horizontal overflow at a 390px mobile viewport. Historical approvals do not automatically authorize new submissions.

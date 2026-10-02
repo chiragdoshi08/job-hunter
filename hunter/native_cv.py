@@ -41,11 +41,12 @@ def paragraph_context(doc):
 
 def editable(doc):
     runs={};bullets={}
+    final={p['key'] for tab in tabs(doc) for p in paragraphs(doc) if p['tabId']==tab['tabId'] and p['endIndex']==max((n.get('endIndex',0) for n in (tab.get('body') or {}).get('content',[])),default=0)}
     for p in paragraphs(doc):
         paragraph=p['paragraph'];elements=paragraph.get('elements',[])
         protected=any('textRun' not in e or re.search('[\ue000-\uf8ff]',e.get('textRun',{}).get('content','')) for e in elements)
         if protected:continue
-        if paragraph.get('bullet'):bullets[p['key']]=p
+        if paragraph.get('bullet') and p['key'] not in final:bullets[p['key']]=p
         for e in elements:
             run=e['textRun'];text=run.get('content','').rstrip('\n');style=run.get('textStyle',{})
             size=style.get('fontSize',{}).get('magnitude',11)
@@ -77,6 +78,10 @@ def fingerprint(doc):
 def requests_for(doc,plan,profile,policy):
     runs,bullets=editable(doc);removals=set(plan['remove_bullets']);seen=set();requests=[]
     if removals and policy!='ai_one_page':raise ValueError('Only the one-page CV policy permits removing source bullets')
+    # Google Docs owns the last segment newline. Conservatively retain its
+    # paragraph rather than delete it or leave an empty trailing bullet.
+    final={p['key'] for tab in tabs(doc) for p in paragraphs(doc) if p['tabId']==tab['tabId'] and p['endIndex']==max((n.get('endIndex',0) for n in (tab.get('body') or {}).get('content',[])),default=0)}
+    removals-=final;plan['remove_bullets']=[key for key in plan['remove_bullets'] if key in removals]
     if not removals<=set(bullets):raise ValueError('The plan attempted to remove a protected source paragraph')
     changes=[]
     for edit in plan['edits']:
@@ -107,7 +112,12 @@ def requests_for(doc,plan,profile,policy):
         batch=[{'deleteContentRange':{'range':rng}}]
         if text:batch.append({'insertText':{'location':{'index':start,'tabId':p['tabId']},'text':text}})
         style=e['textRun'].get('textStyle',{})
-        if style and text:batch.append({'updateTextStyle':{'range':{'startIndex':start,'endIndex':start+len(text.encode('utf-16-le'))//2,'tabId':p['tabId']},'textStyle':style,'fields':','.join(style)}})
+        if style and text:
+            finish=start+len(text.encode('utf-16-le'))//2;split=start+len(text[0].encode('utf-16-le'))//2
+            # Updating an entire list paragraph also styles its bullet in Docs.
+            # Separate partial ranges preserve the list's independent glyph font.
+            for left,right in ((start,split),(split,finish)):
+                if right>left:batch.append({'updateTextStyle':{'range':{'startIndex':left,'endIndex':right,'tabId':p['tabId']},'textStyle':style,'fields':','.join(style)}})
         changes.append((p['tabId'],start,batch))
     for key in removals:
         p=bullets[key];changes.append((p['tabId'],p['startIndex'],[{'deleteContentRange':{'range':{'startIndex':p['startIndex'],'endIndex':p['endIndex'],'tabId':p['tabId']}}}]))
@@ -122,7 +132,13 @@ def verify_preserved(before,after,plan):
     edits={e['run']:e['text'] for e in plan['edits']};removed=set(plan['remove_bullets'])
     def bullet_style(document,p):
         value=p['paragraph'].get('bullet') or {};tab=next(t for t in tabs(document) if t['tabId']==p['tabId'])
-        return ({k:v for k,v in value.items() if k!='listId'},(tab.get('lists') or {}).get(value.get('listId')))
+        definition=(tab.get('lists') or {}).get(value.get('listId'))
+        if not value:return None
+        levels=(definition or {}).get('listProperties',{}).get('nestingLevels',[]);level=value.get('nestingLevel',0)
+        glyph=levels[level].get('textStyle',{}) if level<len(levels) else {}
+        style={'bold':False,'italic':False,'underline':False,'strikethrough':False,'smallCaps':False,'baselineOffset':'NONE','backgroundColor':{},'foregroundColor':{'color':{'rgbColor':{}}}}
+        style.update(glyph);style.update(value.get('textStyle',{}))
+        return ({k:v for k,v in value.items() if k not in ('listId','textStyle')},style,definition)
     expected=[]
     for p in paragraphs(before):
         if p['key'] in removed:continue
@@ -202,6 +218,7 @@ def _prepare_once(identity,task,owner,decider,cancelled,drive_factory):
             previous=json.loads((folder/'before.json').read_text())
             if fingerprint(doc)==fingerprint(previous):
                 requests=requests_for(doc,saved['plan'],ctx['profile']['text'],policy)
+                save()
                 if requests:drive.update(copied,requests,doc['revisionId'])
         if saved['stage'] in ('copied','needs_revision','planning'):
             source=json.loads((folder/'source.json').read_text())

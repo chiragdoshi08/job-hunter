@@ -4,6 +4,8 @@
 - Preserve template geometry and text styles, audit edited facts, verify page policy and visually inspect exported pages; checkpoint interrupted work and repair rejected plans.
 - Run document work independently so a CV does not occupy the browser handover worker.
 - Start saved native tasks locally from the existing application, without requiring a new chat.
+- Preserve Google Docs’ final segment newline and independent bullet font during one-page CV edits.
+- Exclude hidden React validation controls and read visible selected dropdown values.
 - Capture hidden résumé inputs and custom dropdown choices; distinguish a job-search field from an application form.
 - Re-check delayed employer receipts and resolve uncertain attempts without clicking Submit again.
 - Journal account-wide résumé changes, verify exact replacement bytes, restore the saved original and expose recovery after failure or restart.

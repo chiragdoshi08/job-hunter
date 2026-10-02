@@ -9,6 +9,13 @@ class StalePage(ValueError):pass
 OBSERVE = r'''() => {
  const out=[]; let n=0;
  const clean=s=>String(s||'').replace(/\s*[✱*]\s*$/u,'').replace(/\s+/g,' ').trim();
+ const selectedValue=e=>{
+  if(e.tagName==='INPUT')for(let p=e.parentElement,level=0;p&&p!==document.body&&level<4;p=p.parentElement,level++){
+   const selected=p.querySelector('[class*="single-value"],[class*="singleValue"]');
+   if(selected)return clean(selected.innerText);
+  }
+  return e.value||e.innerText||'';
+ };
  const visualLabel=e=>{
   const labelled=(e.getAttribute('aria-labelledby')||'').split(/\s+/).map(id=>document.getElementById(id)?.innerText||'').join(' ');
   if(labelled.trim())return labelled;
@@ -19,7 +26,7 @@ OBSERVE = r'''() => {
   return '';
  };
  for(const e of document.querySelectorAll('input,textarea,select,button,a[href],[role="button"],[role="combobox"]')) {
-  if((!e.getClientRects().length&&e.type!=='file') || e.disabled || e.type==='hidden')continue;
+  if((!e.getClientRects().length&&e.type!=='file') || e.disabled || e.type==='hidden' || (e.getAttribute('aria-hidden')==='true'&&e.type!=='file'))continue;
   const type=e.getAttribute('role')==='combobox'?'combobox':e.type||e.tagName.toLowerCase();
   if(type==='password' || /otp|one.time|verification.code|security.code/i.test(e.autocomplete||''))continue;
   e.setAttribute('data-job-hunter',String(++n));
@@ -33,7 +40,7 @@ OBSERVE = r'''() => {
    choices:e.tagName==='SELECT'?Array.from(e.options).map(o=>o.text.trim()).filter(Boolean):JSON.parse(e.getAttribute('data-job-hunter-choices')||'[]'),
    files:type==='file'?Array.from(e.files||[]).map(f=>f.name):[],
    href:e.tagName==='A'?e.href:null, checked:['checkbox','radio'].includes(type)?e.checked:null,
-   value:type==='combobox'?(e.value||e.innerText||''):['input','textarea','select'].includes(e.tagName.toLowerCase()) && type!=='file'?e.value:null});
+   value:type==='combobox'?selectedValue(e):['input','textarea','select'].includes(e.tagName.toLowerCase()) && type!=='file'?e.value:null});
  }
  return {url:location.href,title:document.title,text:document.body.innerText.slice(0,16000),elements:out.slice(0,300),element_count:out.length,
   password_present:!!document.querySelector('input[type=password]'),

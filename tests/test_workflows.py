@@ -90,6 +90,12 @@ class WorkflowTests(unittest.TestCase):
         native_cv.requests_for(doc,plan,profile,'strategy_two_pages');self.assertEqual(edit['evidence'],profile)
         edit['evidence']='Led operations with invented process improvements.'
         with self.assertRaisesRegex(ValueError,'supporting quote'):native_cv.requests_for(doc,plan,profile,'strategy_two_pages')
+    def test_native_final_newline_is_retained_and_bullet_font_changes_are_rejected(self):
+        doc=self.doc();plan={'edits':[],'remove_bullets':['t.0:1']}
+        self.assertEqual(native_cv.requests_for(doc,plan,'Verified profile facts.','ai_one_page'),[]);self.assertEqual(plan['remove_bullets'],[])
+        doc['tabs'][0]['lists']={'one':{'listProperties':{'nestingLevels':[{'glyphSymbol':'•','textStyle':{'weightedFontFamily':{'fontFamily':'Arial','weight':400}}}]}}}
+        after=copy.deepcopy(doc);after['tabs'][0]['body']['content'][0]['paragraph']['bullet']['textStyle']={'weightedFontFamily':{'fontFamily':'Times New Roman','weight':400}}
+        with self.assertRaisesRegex(ValueError,'formatting'):native_cv.verify_preserved(doc,after,plan)
     def test_native_fragment_deletion_cannot_empty_a_bullet(self):
         doc=self.doc();paragraph=doc['tabs'][0]['body']['content'][0]['paragraph'];original=paragraph['elements'][0]
         original['textRun']['content']=original['textRun']['content'].rstrip('\n')

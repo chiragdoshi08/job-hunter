@@ -68,6 +68,11 @@ class BrowserAcceptance(unittest.TestCase):
     def test_stale_dom_cannot_apply_action(self):
         obs=self.browser.navigate(self.url);self.browser.page.locator('input[type=email]').fill('changed@example.test')
         with self.assertRaisesRegex(ValueError,'page changed'):self.browser.act(obs,1,'fill','fixture@example.test')
+    def test_hidden_react_select_validation_input_is_not_a_second_question(self):
+        self.browser.start();self.browser.page.set_content('<fieldset><legend>Phone</legend><label id="country-label">Country</label><div><div class="select__single-value">Fixture country</div><input role="combobox" aria-labelledby="country-label"></div><input aria-hidden="true" required tabindex="-1"></fieldset><input type="file" aria-hidden="true" style="display:none" aria-label="Resume">')
+        observation=self.browser.observe();fields=agent.observed_fields(observation)
+        self.assertEqual([f['question'] for f in fields],['Phone · Country']);self.assertEqual(len([e for e in observation['elements'] if e['type']=='file']),1)
+        self.assertEqual(next(e for e in observation['elements'] if e['type']=='combobox')['value'],'Fixture country')
     def test_two_applications_keep_separate_live_pages(self):
         self.browser.activate('first',self.url);self.browser.page.locator('input[type=email]').fill('first@example.test')
         self.browser.activate('second',self.url);self.browser.page.locator('input[type=email]').fill('second@example.test')
