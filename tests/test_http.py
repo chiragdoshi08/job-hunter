@@ -23,6 +23,13 @@ class LocalApiTests(unittest.TestCase):
   self.assertEqual(self.request('/api/strategy/auto-discovery',{'enabled':True,'interval_hours':24})[0],200)
   self.assertTrue(self.request('/api/strategy/settings')[1]['auto_discovery']['enabled'])
   self.assertFalse(self.request('/api/ai/settings')[1]['auto_discovery']['enabled'])
+ def test_email_alert_credentials_are_protected_by_session_and_csrf(self):
+  body={'action':'configure','enabled':True,'channel':'email','email':{'username':'fixture@example.test','recipient':'fixture@example.test','password':'fixture-private-app-password'}}
+  self.assertEqual(self.request('/api/notifications',body,auth=False)[0],401)
+  self.assertEqual(self.request('/api/notifications',body,csrf=False)[0],403)
+  code,status=self.request('/api/notifications',body);self.assertEqual(code,200);self.assertTrue(status['email_configured']);self.assertNotIn('fixture-private-app-password',json.dumps(status))
+  code,status=self.request('/api/notifications');self.assertEqual(code,200);self.assertNotIn('password',status['email'])
+  self.assertEqual(self.request('/api/notifications',{'action':'test'})[0],200)
  def test_question_bank_review_api_uses_displayed_version(self):
   q=questions.save('ai',{'question':'Email address','value':'fixture@example.test','confirmed':False})
   self.assertEqual(self.request('/api/ai/questions')[1]['counts']['needs_review'],1)

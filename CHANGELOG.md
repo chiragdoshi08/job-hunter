@@ -9,7 +9,7 @@
 - Capture hidden résumé inputs and custom dropdown choices; distinguish a job-search field from an application form.
 - Re-check delayed employer receipts and resolve uncertain attempts without clicking Submit again.
 - Journal account-wide résumé changes, verify exact replacement bytes, restore the saved original and expose recovery after failure or restart.
-- Add optional, deduplicated ntfy phone alerts with durable retries and generic private messages.
+- Add optional email and ntfy alerts with durable retries, stable email message IDs, deduplication and generic private messages. TLS is required; email app passwords are kept out of status responses and portable backups.
 - Build a Windows installer with bundled Python, Codex, Chromium and PDF renderer; test launch, upload, stop, silent install and uninstall on Windows.
 - Fix Windows subprocess output, portable backup paths, private data ACLs and detached service shutdown.
 - Add Apple notarization tooling; actual notarization still requires a Developer ID certificate.

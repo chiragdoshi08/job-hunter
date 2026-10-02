@@ -14,7 +14,7 @@
 | Account résumé replacement risked losing the original | Download and journal first; verify replacement; restore and verify; pause on failure and offer recovery | Review real account controls; transformed PDFs or extra save steps need an adapter |
 | Download relied on developer files | Bundled Mac app and Windows installer; no candidate defaults | Mac notarization and publisher signing need owner certificates |
 | Windows paths and subprocess handling failed | Portable ZIP paths, native ACLs, pipe event reader, detached service and graceful stop | Windows installer acceptance runs in CI |
-| Phone handover was unclear | Optional ntfy alerts, remote desktop to the same browser, Resume | Enable the private topic and allow Android notifications; computer stays awake/online |
+| Phone handover was unclear | Optional email or ntfy alerts, remote desktop to the same browser, Resume | Configure email credentials or the private topic and allow Android notifications; computer stays awake/online |
 | Upgrade could damage history | Backup first; replace code only; compare tracker counts | Review saved historical applications before resuming |
 
 ## Evidence and limits

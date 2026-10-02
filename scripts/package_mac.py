@@ -45,8 +45,8 @@ published checksum. Do not disable system security globally.
 
 Individual employer workflows still require testing. Native Google Docs CVs
 run automatically after you connect Drive and select a master and template.
-Uploaded baseline PDFs stay unchanged. Optional Android ntfy alerts can be
-enabled in Agent setup; keep your private topic secret.
+Uploaded baseline PDFs stay unchanged. Optional email or ntfy alerts can be
+configured in Agent setup; enter email app passwords inside the local app.
 No candidate data is included. Private data stays in your Application Support
 folder. Back up from Settings before changing computers or upgrading.
 

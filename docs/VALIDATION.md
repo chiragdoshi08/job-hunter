@@ -1,6 +1,6 @@
 # Validation
 
-On 2 October 2026, 173 regression tests passed on Apple Silicon with Python 3.14.4, Playwright 1.63.0, pypdf 6.19.0 and pypdfium2 5.13.0. The suite includes 10 real browser tests. The final suite also covers native default-style normalization, source-quote whitespace, safe fragment deletion and uncertain receipt recovery.
+On 2 October 2026, 177 regression tests passed on Apple Silicon with Python 3.14.4, Playwright 1.63.0, pypdf 6.19.0 and pypdfium2 5.13.0. The suite includes 10 real browser tests. The final suite also covers native default-style normalization, source-quote whitespace, safe fragment deletion and uncertain receipt recovery.
 
 Verified acceptance flow: import synthetic résumé → immutable profile/PDF → prepare → capture questions → review answers → approve fill → upload exact PDF → approve submit → reserve one attempt → observe configured employer receipt → Submitted → reject duplicate submission.
 
@@ -20,6 +20,6 @@ The Apple Silicon app is built with bundled Codex, Python, Chromium and PDF rend
 
 ## Practical limits
 
-Live Lever, Greenhouse and Ashby forms were inspected read-only and their candidate questions captured. Greenhouse’s hidden validation input was being mistaken for a second country question; it is now excluded, and the selected React dropdown value is read from its visible label. A visible CAPTCHA on that page still requires human completion. This proves scanning on that page, not complete platform certification. No actual employer application is submitted as a release test. Original account résumé restoration is browser-fixture tested; each real account requires reviewed controls. Android delivery requires the user to subscribe and allow notifications; no phone topic was enabled without that choice.
+Live Lever, Greenhouse and Ashby forms were inspected read-only and their candidate questions captured. Greenhouse’s hidden validation input was being mistaken for a second country question; it is now excluded, and the selected React dropdown value is read from its visible label. A visible CAPTCHA on that page still requires human completion. This proves scanning on that page, not complete platform certification. No actual employer application is submitted as a release test. Original account résumé restoration is browser-fixture tested; each real account requires reviewed controls. Email TLS ordering, SMTP acceptance, credential rejection, protected configuration and backup exclusion are covered by tests. Actual inbox delivery requires user-provided email credentials and a test alert; it is not claimed before those steps. Android delivery also requires notification permission. No ntfy topic was enabled without the user’s choice.
 
 The existing installation was backed up and upgraded. All 171 jobs, 26 applications, 24 historical documents, 188 answers and three profiles were preserved. Both roles passed all-screen UI checks with no page errors and no horizontal overflow at a 390px mobile viewport. Historical approvals do not automatically authorize new submissions.

@@ -133,10 +133,10 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:self.error(e)
     def post(self,path,b):
         if path=='/api/notifications':
-            if b.get('action')=='configure':return self.send(200,notifications.configure(b.get('enabled') is True))
+            if b.get('action')=='configure':return self.send(200,notifications.configure(b.get('enabled') is True,b.get('channel'),b.get('email')))
             if b.get('action')=='test':
-                if not notifications.status()['enabled']:raise ValueError('Enable phone alerts first')
-                notifications.enqueue('test:'+db.uid(),'Job Hunter connected','Phone alerts are connected. Open Job Hunter to review your saved applications.')
+                if not notifications.status()['enabled']:raise ValueError('Configure and enable alerts first')
+                notifications.enqueue('test:'+db.uid(),'Job Hunter connected','Your Job Hunter test alert is ready. Open Job Hunter to review your saved applications.')
                 return self.send(200,{'queued':True})
             raise ValueError('Unknown notification action')
         if path=='/api/agent':

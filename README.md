@@ -2,7 +2,7 @@
 
 A local job-search agent powered by your ChatGPT sign-in. It discovers vacancies, checks fit against your profile, prepares an application record, reads employer forms, and fills the reviewed answers and exact PDF. It saves its progress and continues other applications when one needs your help.
 
-**Version 0.3.0.** Automatic native Google Docs CV preparation, verified account résumé recovery, optional Android alerts and a Windows installer are included. The complete submission flow is tested against a synthetic employer. Individual employer workflows still require validation; the app does not claim universal site support. Uploaded baseline résumés retain their original wording.
+**Version 0.3.0.** Automatic native Google Docs CV preparation, verified account résumé recovery, optional email or Android alerts and a Windows installer are included. The complete submission flow is tested against a synthetic employer. Individual employer workflows still require validation; the app does not claim universal site support. Uploaded baseline résumés retain their original wording.
 
 ## Download and start
 
@@ -61,7 +61,7 @@ No acceptance test sends a real employer application. A live ChatGPT connection 
 - A login, account creation requiring agreement, MFA or CAPTCHA can require human takeover.
 - Some sites block automation, hide fields inside custom widgets, or use complex multi-step forms. These require further site-specific testing/adapters.
 - Native CV work runs independently from browser tasks, makes a full template copy, checks profile facts, preserves native formatting, exports PDF and inspects every page. A failed fact or layout check saves progress for correction; it cannot silently fall back to a baseline.
-- Optional phone alerts use ntfy. Enable them in Agent setup and subscribe to the private topic in the Android ntfy app. Alerts contain generic status messages, not candidate or employer details. Delivery depends on your network and Android notification settings. The topic is private bearer access; keep it secret.
+- Choose email or ntfy alerts in Agent setup. Email uses your provider’s TLS SMTP server and app password; Gmail defaults and [Google’s app-password instructions](https://support.google.com/mail/answer/185833) are included. Enter credentials inside the local app; they are excluded from portable backups and never shown in status responses. OAuth-only mail accounts need a supported SMTP relay. For ntfy, subscribe to your private topic in the Android app and keep it secret. Both channels use generic status messages without candidate or employer details. Network and phone notification settings affect delivery.
 - Apple notarization and a signed automatic updater are not included. Signing requires the release owner’s Developer ID certificate; no certificate was available for this release.
 - This app cannot override an AI tool's enforced permission denial or a site's access restriction.
 

@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+import smtplib
 from unittest.mock import patch
 from hunter import db,notifications,resume_accounts,native_cv,adapters
 from hunter.process_events import EventLines
@@ -33,6 +34,36 @@ class WorkflowTests(unittest.TestCase):
             self.assertEqual(request.get_header('Cache'),'no')
             return Response(json.dumps({'event':'message','topic':notifications.status()['topic']}).encode())
         notifications.deliver_once(online,clock=lambda:131);self.assertEqual(db.rows('SELECT * FROM notification_outbox')[0]['state'],'sent')
+    def test_email_settings_do_not_expose_or_backup_app_password(self):
+        from hunter import backup
+        import zipfile
+        settings={'username':'fixture@example.test','recipient':'fixture@example.test','password':'private-fixture-app-password'}
+        notifications.configure(True,'email',settings);self.assertNotIn(settings['password'],db.dump(notifications.status()))
+        self.assertTrue(notifications.status()['email_configured'])
+        notifications.configure(True,'email',{'password':''});self.assertEqual(notifications.configuration()['email']['password'],settings['password'])
+        with zipfile.ZipFile(backup.create_backup()) as archive:self.assertNotIn('phone-alerts.json',archive.namelist())
+        with self.assertRaisesRegex(ValueError,'app password'):notifications.configure(True,'email',{'host':'another.example.test'})
+        self.assertEqual(notifications.configuration()['email']['host'],'smtp.gmail.com')
+    def test_email_uses_tls_acknowledgment_and_durable_message_id(self):
+        notifications.configure(True,'email',{'host':'smtp.example.test','port':587,'security':'starttls','username':'fixture@example.test','recipient':'fixture@example.test','password':'fixture-secret'})
+        notifications.enqueue('mail-one','Job Hunter needs your help','Open Job Hunter.')
+        calls=[];messages=[]
+        class SMTP:
+            def __init__(self,host,port,**kw):calls.append(('connect',host,port,kw['timeout']))
+            def __enter__(self):return self
+            def __exit__(self,*args):pass
+            def ehlo(self):calls.append(('ehlo',))
+            def starttls(self,context):calls.append(('tls',context.check_hostname))
+            def login(self,user,password):calls.append(('login',user,password))
+            def send_message(self,message):messages.append(message);return {}
+        notifications.deliver_once(clock=lambda:100,smtp_factory=SMTP)
+        self.assertLess(calls.index(('tls',True)),calls.index(('login','fixture@example.test','fixture-secret')))
+        item=db.rows('SELECT * FROM notification_outbox')[0];self.assertEqual(item['state'],'sent');self.assertIn(item['id'],messages[0]['Message-ID']);self.assertNotIn('fixture-secret',str(messages[0]))
+    def test_email_bad_credentials_stop_retries_with_a_useful_private_error(self):
+        notifications.configure(True,'email',{'username':'fixture@example.test','recipient':'fixture@example.test','password':'fixture-secret'});notifications.enqueue('mail-one','Title','Message')
+        def refused(*args,**kw):raise smtplib.SMTPAuthenticationError(535,b'PRIVATE fixture-secret')
+        notifications.deliver_once(clock=lambda:100,smtp_factory=refused);item=db.rows('SELECT * FROM notification_outbox')[0]
+        self.assertEqual(item['state'],'failed');self.assertIn('app password',item['error']);self.assertNotIn('fixture-secret',item['error'])
     def backend(self,fail=False):
         original=pdf_bytes();replacement=original+b'\n% Reviewed replacement'
         class Backend:
