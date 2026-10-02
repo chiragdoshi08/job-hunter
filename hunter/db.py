@@ -88,7 +88,9 @@ def init():
     DATA.mkdir(parents=True,exist_ok=True,mode=0o700)
     with contextlib.closing(connect()) as c:
         c.executescript(SHARED); c.execute('INSERT OR IGNORE INTO migrations VALUES(1,?)',(now(),)); c.commit()
-    from . import identities,sharing,reviews
+    from . import identities,sharing,reviews,notifications,resume_accounts
+    notifications.init()
+    resume_accounts.init()
     identities.load_registry()
     creating=[]
     for item in rows('SELECT id,state FROM identities'):
@@ -234,6 +236,9 @@ def task_update(identity,id,**fields):
     for k in ('checkpoint','result'):
         if k in fields and not isinstance(fields[k],str):fields[k]=dump(fields[k])
     with tx(identity) as c:c.execute('UPDATE tasks SET '+','.join(k+'=?' for k in fields)+' WHERE id=?',(*fields.values(),id))
+    if fields.get('state') in ('waiting_user','completed'):
+        from . import notifications
+        notifications.task_changed(identity,one('SELECT * FROM tasks WHERE id=?',(id,),identity))
 
 def acquire(resource,owner,ttl=1800):
     with tx() as c:

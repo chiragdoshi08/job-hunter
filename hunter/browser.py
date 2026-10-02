@@ -18,22 +18,22 @@ OBSERVE = r'''() => {
   }
   return '';
  };
- for(const e of document.querySelectorAll('input,textarea,select,button,a[href],[role="button"]')) {
-  if(!e.getClientRects().length || e.disabled || e.type==='hidden')continue;
-  const type=e.type||e.tagName.toLowerCase();
+ for(const e of document.querySelectorAll('input,textarea,select,button,a[href],[role="button"],[role="combobox"]')) {
+  if((!e.getClientRects().length&&e.type!=='file') || e.disabled || e.type==='hidden')continue;
+  const type=e.getAttribute('role')==='combobox'?'combobox':e.type||e.tagName.toLowerCase();
   if(type==='password' || /otp|one.time|verification.code|security.code/i.test(e.autocomplete||''))continue;
   e.setAttribute('data-job-hunter',String(++n));
-  const field=['INPUT','TEXTAREA','SELECT'].includes(e.tagName)&&!['submit','button'].includes(type);
+  const field=(['INPUT','TEXTAREA','SELECT'].includes(e.tagName)||type==='combobox')&&!['submit','button'].includes(type);
   const label=clean(e.getAttribute('aria-label')||(field?(e.labels?.[0]?.innerText||visualLabel(e)||e.getAttribute('placeholder')||e.name):(e.innerText||e.value))||'');
   const section=e.closest('fieldset')?.querySelector('legend')?.innerText?.trim()||'';
   const group=e.name||'';
   out.push({id:n,group,question:section||e.closest('[role=radiogroup]')?.getAttribute('aria-label')||group,tag:e.tagName.toLowerCase(),type,label:label.slice(0,1500),section,
    required:!!e.required||e.getAttribute('aria-required')==='true',
    max_length:e.maxLength>0?e.maxLength:null,
-   choices:e.tagName==='SELECT'?Array.from(e.options).map(o=>o.text.trim()).filter(Boolean):[],
+   choices:e.tagName==='SELECT'?Array.from(e.options).map(o=>o.text.trim()).filter(Boolean):JSON.parse(e.getAttribute('data-job-hunter-choices')||'[]'),
    files:type==='file'?Array.from(e.files||[]).map(f=>f.name):[],
    href:e.tagName==='A'?e.href:null, checked:['checkbox','radio'].includes(type)?e.checked:null,
-   value:['input','textarea','select'].includes(e.tagName.toLowerCase()) && type!=='file'?e.value:null});
+   value:type==='combobox'?(e.value||e.innerText||''):['input','textarea','select'].includes(e.tagName.toLowerCase()) && type!=='file'?e.value:null});
  }
  return {url:location.href,title:document.title,text:document.body.innerText.slice(0,16000),elements:out.slice(0,300),element_count:out.length,
   password_present:!!document.querySelector('input[type=password]'),
@@ -54,7 +54,7 @@ class Browser:
         self.runtime=sync_playwright().start()
         path=db.DATA/'browser-profile';path.mkdir(mode=0o700,parents=True,exist_ok=True)
         try:
-            self.context=self.runtime.chromium.launch_persistent_context(str(path),headless=self.headless,accept_downloads=False)
+            self.context=self.runtime.chromium.launch_persistent_context(str(path),headless=self.headless,accept_downloads=True)
             self.page=self.context.pages[0] if self.context.pages else self.context.new_page()
         except Exception:
             self.runtime.stop();self.runtime=None
@@ -103,7 +103,12 @@ class Browser:
     def act(self,observation,index,action,value=None,file=None):
         element,loc=self.element(observation,index)
         if action=='fill':loc.fill(value)
-        elif action=='select':loc.select_option(label=value)
+        elif action=='select':
+            if element['type']=='combobox':
+                loc.click();option=self.page.get_by_role('option',name=value,exact=True)
+                if option.count()!=1:raise ValueError('The approved choice is missing or ambiguous in this dropdown')
+                option.click()
+            else:loc.select_option(label=value)
         elif action=='check':loc.set_checked(bool(value))
         elif action=='upload':loc.set_input_files(str(file))
         elif action=='click':
@@ -113,6 +118,14 @@ class Browser:
         else:raise ValueError('Unsupported browser action')
         self.page.wait_for_timeout(250)
         return self.observe()
+
+    def read_choices(self,observation,index):
+        element,loc=self.element(observation,index)
+        if element['type']!='combobox':raise ValueError('Read choices only from an observed dropdown')
+        loc.click();options=self.page.get_by_role('option');options.first.wait_for(timeout=10000)
+        if options.count()>300:raise ValueError('This dropdown needs manual review; it has too many choices')
+        values=options.all_text_contents();loc.evaluate('(e,values)=>e.setAttribute("data-job-hunter-choices",JSON.stringify(values))',values)
+        loc.press('Escape');return self.observe()
 
     def screenshot(self,path):
         self.page.screenshot(path=str(path),full_page=True)

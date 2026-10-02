@@ -24,10 +24,12 @@ def claim(i,id,owner):
             try:
                 if t['kind'] in ('fill','submit'):db.verify_approval(i,a['id'],'fill' if t['kind']=='fill' else 'submit')
                 host=urlsplit(j['url']).hostname
-                acc=db.one('SELECT * FROM accounts WHERE site=?',(host,))
+                from .resume_accounts import account_site
+                account=account_site(j['url'])
+                acc=db.one('SELECT * FROM accounts WHERE site IN (?,?) AND paused=1',(host,account))
                 if acc and acc['paused']:raise ValueError('This job-site account is paused: '+str(acc['reason']))
                 # Shared browser is deliberately serialised, including account-level resume state.
-                if not db.acquire('desktop-browser',key) or not db.acquire('account:'+host,key):raise ValueError('Another application is using the shared browser/account')
+                if not db.acquire('desktop-browser',key) or not db.acquire('account:'+account,key):raise ValueError('Another application is using the shared browser/account')
             except Exception:db.release(key);raise
     with db.tx(i) as c:
         current=dict(c.execute('SELECT * FROM tasks WHERE id=?',(id,)).fetchone())

@@ -14,6 +14,7 @@ def create_backup():
             for category in ('documents','runs','profile_files'):
                 folder=db.DATA/i/category
                 if folder.exists():shutil.copytree(folder,stage/i/category)
+        if (db.DATA/'account_resumes').exists():shutil.copytree(db.DATA/'account_resumes',stage/'account_resumes')
         for p in stage.rglob('*'):
             if p.is_file():files[str(p.relative_to(stage))]=hashlib.sha256(p.read_bytes()).hexdigest()
         (stage/'manifest.json').write_text(db.dump({'version':1,'created_at':db.now(),'identities':list(db.IDENTITIES),'files':files}))

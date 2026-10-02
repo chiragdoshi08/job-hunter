@@ -1,5 +1,6 @@
 from __future__ import annotations
-import concurrent.futures, json, os, re, selectors, shutil, signal, subprocess, threading, time
+import concurrent.futures, json, os, re, shutil, signal, subprocess, threading, time
+from .process_events import EventLines
 from pathlib import Path
 from . import db, sources, desktop
 
@@ -203,18 +204,15 @@ class Runner:
             p=subprocess.Popen(cmd,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=err,text=True,cwd=folder,env=clean_env(),start_new_session=os.name!='nt')
             with self.guard:self.active[i+':'+t['id']]=p
             db.task_update(i,t['id'],pid=p.pid,model=model,progress='Codex process started; waiting for first agent event')
-            p.stdin.write(prompt);p.stdin.close();sel=selectors.DefaultSelector();sel.register(p.stdout,selectors.EVENT_READ);started=time.monotonic();turn_completed=False
+            p.stdin.write(prompt);p.stdin.close();lines=EventLines(p.stdout);started=time.monotonic();turn_completed=False
             while True:
                 if self.cancelled(i,t['id']) or time.monotonic()-started>600:
                     p.terminate() if os.name=='nt' else os.killpg(p.pid,signal.SIGTERM);p.wait(timeout=10)
                     if not self.cancelled(i,t['id']):raise RuntimeError('Codex timed out. Saved checkpoint is ready to resume.')
                     return
-                ready=sel.select(.5)
+                ready,line=lines.next(.5)
                 if ready:
-                    line=p.stdout.readline()
-                    if not line:
-                        if p.poll() is not None:break
-                        continue
+                    if line is None:break
                     events.write(line);events.flush()
                     try:event=json.loads(line)
                     except ValueError:continue
@@ -223,8 +221,7 @@ class Runner:
                     if typ=='turn.started':db.task_update(i,t['id'],progress='Codex is assessing the captured profile and job description')
                     if typ=='turn.completed':turn_completed=True
                     if typ in ('error','turn.failed'):db.task_update(i,t['id'],error=str(event.get('message') or event.get('error'))[:500])
-                elif p.poll() is not None:break
-            code=p.wait();sel.close()
+            code=p.wait()
         if code or not turn_completed or not output.exists():
             message=(folder/'stderr.log').read_text()[-1000:]
             raise RuntimeError('Codex did not complete. '+(message or 'Open diagnostics for event details.'))

@@ -44,6 +44,8 @@ def readiness(identity):
        'browser_installed':bool(importlib.util.find_spec('playwright')),
        'browser_check':db.get_setting('browser_check',{}),
        'inference_check':db.get_setting('inference_check',{}),
+       'drive_check':db.get_setting('drive_check',{}),
+       'native_template':db.get_setting('cv_template_id',None,identity),
        'baseline_resume':{k:v for k,v in db.get_setting('baseline_resume',{},identity).items() if k!='path'},
        'data_directory':str(db.DATA),'execution_mode':db.get_setting('execution_mode'),
        'goal':db.get_setting('agent_goal',{'enabled':False,'stage':'review'},identity)}

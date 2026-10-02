@@ -3,13 +3,32 @@ import re
 from urllib.parse import urlsplit
 from . import db
 
+PLATFORMS={
+ 'lever':('lever.co',), 'greenhouse':('greenhouse.io',), 'ashby':('ashbyhq.com',),
+ 'workday':('myworkdayjobs.com','myworkdaysite.com'), 'bamboohr':('bamboohr.com',),
+ 'keka':('keka.com','kekahire.com'), 'linkedin':('linkedin.com',)}
+
+def platform(url):
+    host=urlsplit(url).hostname or ''
+    return next((name for name,domains in PLATFORMS.items() if any(host==d or host.endswith('.'+d) for d in domains)),'generic')
+
+def application_form(obs):
+    controls=[e for e in obs['elements'] if e['tag'] in ('input','textarea','select') or e.get('type')=='combobox']
+    if any(e['type']=='file' for e in controls):return True
+    labels=' '.join(e['label'] for e in controls)
+    if obs['text'].strip().lower() in ('application','job application','application form') and re.search('email|name',labels,re.I):return True
+    return bool(re.search(r'first name|full name|your name',labels,re.I) and re.search(r'email',labels,re.I) and not obs.get('password_present'))
+
+def entry_button(obs,e):
+    return platform(obs['url']) in ('lever','greenhouse','ashby','workday','bamboohr','keka') and not application_form(obs) and e['tag']=='button' and e['type']!='submit' and bool(re.fullmatch(r'apply(?: now| for (?:this (?:job|position)|job))?',e['label'],re.I))
+
 
 def capability(url):
     host=urlsplit(url).hostname or ''
     if host in ('127.0.0.1','localhost'):
         return {'host':host,'fill':'fixture','submit':'fixture','enabled':bool(db.get_setting('fixture_submission_enabled',False))}
     recorded=db.get_setting('submission_sites',{}).get(host,{})
-    return {'host':host,'fill':'generic_unverified','submit':'user_enabled' if recorded.get('enabled') else 'disabled',
+    return {'host':host,'platform':platform(url),'fill':'observed_form_with_review','submit':'user_enabled' if recorded.get('enabled') else 'disabled',
         'enabled':bool(recorded.get('enabled')),'reviewed_at':recorded.get('reviewed_at'),
         'confirmation_pattern':recorded.get('confirmation_pattern','')}
 

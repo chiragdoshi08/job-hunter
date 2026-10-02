@@ -11,7 +11,7 @@ command=[sys.executable,'-m','PyInstaller','--noconfirm','--clean','--windowed',
  '--distpath',a.dist,'--workpath',a.work,'--specpath',a.work,
  '--add-data',str(root/'static')+':static','--add-data',str(root/'workflows')+':workflows',
  '--add-data',str(root/'THIRD-PARTY-NOTICES.md')+':.','--add-data',str(root/'docs')+':docs',
- '--collect-all','playwright','--collect-all','pypdf','--collect-submodules','hunter',str(root/'launch.py')]
+ '--collect-all','playwright','--collect-all','pypdf','--collect-all','pypdfium2','--collect-submodules','hunter',str(root/'launch.py')]
 env=os.environ.copy();env['PYINSTALLER_CONFIG_DIR']=str(Path(a.work).resolve()/'cache')
 subprocess.run(command,cwd=root,check=True,env=env)
 # Copy browser bundles intact after PyInstaller collection; preserve framework symlinks/signatures.
@@ -26,7 +26,7 @@ subprocess.run(['codesign','--force','--sign','-',str(frameworks/'bin'/'codex')]
 subprocess.run(['codesign','--force','--sign','-',str(app)],check=True)
 import plistlib
 info=app/'Contents'/'Info.plist'
-metadata=plistlib.loads(info.read_bytes());metadata['CFBundleShortVersionString']='0.2.0';metadata['CFBundleVersion']='2'
+metadata=plistlib.loads(info.read_bytes());metadata['CFBundleShortVersionString']='0.3.0';metadata['CFBundleVersion']='3'
 info.write_bytes(plistlib.dumps(metadata))
 subprocess.run(['codesign','--force','--sign','-',str(app)],check=True)
 print(app)

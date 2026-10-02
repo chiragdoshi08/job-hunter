@@ -4,7 +4,7 @@ import re
 import threading
 import time
 from urllib.parse import urlsplit
-from . import db,desktop,questions,model,onboarding
+from . import db,desktop,questions,model,onboarding,resume_accounts,adapters
 from .browser import Browser,StalePage
 
 ACTION_SCHEMA={'type':'object','properties':{
@@ -22,7 +22,7 @@ CREDENTIAL=re.compile(r'password|verification code|one.time|social security|pass
 def observed_fields(obs):
     fields=[];radios={};labels=set()
     for e in obs['elements']:
-        if e['tag'] not in ('input','select','textarea') or e['type'] in ('file','submit','button'):continue
+        if (e['tag'] not in ('input','select','textarea') and e['type']!='combobox') or e['type'] in ('file','submit','button'):continue
         if not e['label'] or CREDENTIAL.search(e['label']):continue
         if re.search(r'cards\[|field\d+\]',e['label']):raise ValueError('A form control has no readable question. Inspect its visible label before filling it.')
         if e['type']=='radio':
@@ -52,7 +52,7 @@ def validate_click(obs,index,kind):
     e=next((x for x in obs['elements'] if x['id']==index),None)
     if not e:raise ValueError('The agent selected a stale element')
     if CREDENTIAL.search(e['label']):raise ValueError('Complete sign-in in the Job Hunter browser, then resume')
-    if kind=='scan_form' and e['tag']!='a':raise ValueError('The form is visible. Review its questions before advancing a form step.')
+    if kind=='scan_form' and e['tag']!='a' and not adapters.entry_button(obs,e):raise ValueError('The form is visible. Review its questions before advancing a form step.')
     if kind!='submit' and e['tag']!='a' and final_action(e):raise ValueError('The form has reached its final action. Review and approve submission in the application.')
     if kind=='submit' and not final_action(e):raise ValueError('Submission must target the visible final application action')
     return e
@@ -80,6 +80,11 @@ class AgentRunner:
                     if command=='show-task':
                         i,id=value;t=desktop.task(i,id);cp=db.unpack(t['checkpoint'],{});ctx=desktop.context(i,id)
                         self.browser.activate(i+':'+t['application_id'],cp.get('url') or ctx['job']['url'])
+                    if command=='resume-recovery':resume_accounts.recover(value,resume_accounts.BrowserBackend(self.browser))
+                    if command=='drive-check':
+                        from .drive import Drive
+                        with Drive(cancelled=self.stop_event.is_set):pass
+                        db.set_setting('drive_check',{'ok':True,'observed_at':db.now()})
                     if command=='inference':
                         schema={'type':'object','properties':{'ok':{'type':'boolean'}},'required':['ok'],'additionalProperties':False}
                         result=self.decider('Connection check only. Return {\"ok\":true}. No tools.',schema,db.DATA/'connection-check',cancelled=self.stop_event.is_set)
@@ -93,7 +98,7 @@ class AgentRunner:
                         if actual!='upload-check.txt':raise ValueError('Browser upload did not complete')
                         db.set_setting('browser_check',{'ok':True,'observed_at':db.now(),'upload':True})
                 except queue.Empty:pass
-                except Exception as e:db.set_setting('inference_check' if command=='inference' else 'browser_check',{'ok':False,'message':str(e),'observed_at':db.now()})
+                except Exception as e:db.set_setting('drive_check' if command=='drive-check' else 'resume_recovery_check' if command=='resume-recovery' else 'inference_check' if command=='inference' else 'browser_check',{'ok':False,'message':str(e),'observed_at':db.now()})
                 if db.get_setting('execution_mode')=='local_agent' and not db.get_setting('paused',False):
                     found=False
                     for i in db.IDENTITIES:
@@ -107,17 +112,28 @@ class AgentRunner:
         if obs:data.update(url=obs['url'],page_fingerprint=obs['revision'],remaining_fields=[f['question'] for f in observed_fields(obs)])
         desktop.checkpoint(i,t['id'],owner,data,True)
     def run(self,i,t):
-        owner='local-agent';obs=None
+        owner='local-agent';obs=None;resume_transaction=None
         try:
             desktop.claim(i,t['id'],owner);ctx=desktop.context(i,t['id'])
             if t['kind']=='prepare':
-                onboarding.baseline_document(i,t['id'],owner)
-                db.task_update(i,t['id'],state='completed',lease_until=None,progress='Original reviewed résumé saved for this application; ready to scan the form',result={'evidence':'PDF hash matches the uploaded original'})
+                if db.get_setting('cv_template_id',None,i):
+                    from .native_cv import prepare
+                    prepare(i,t['id'],owner,self.decider,lambda:self.cancelled(i,t['id']))
+                    message='Native CV prepared and verified; ready to scan the form'
+                else:
+                    onboarding.baseline_document(i,t['id'],owner)
+                    message='Original reviewed résumé saved for this application; ready to scan the form'
+                db.task_update(i,t['id'],state='completed',lease_until=None,progress=message,result={'evidence':'Fixed reviewed PDF registered for this application'})
                 db.enqueue(i,'scan_form',t['job_id'],application_id=t['application_id']);return
             cp=db.unpack(t['checkpoint'],{})
             # Use the same live page after handover. Reopening the URL would destroy filled steps.
             target=cp.get('url') or ctx['job']['url']
             obs=self.browser.activate(i+':'+t['application_id'],target)
+            if t['kind'] in ('fill','submit') and resume_accounts.needs_swap(ctx['job']['url']):
+                selected=db.application(i,t['application_id'])['selected_documents']
+                document=next((d for d in ctx['documents'] if d['id'] in selected and d['kind']=='cv'),None)
+                if not document:raise ValueError('Review a fixed résumé before using this account')
+                resume_transaction=resume_accounts.begin(i,t['application_id'],ctx['job']['url'],db.DATA/i/document['local_path'],resume_accounts.BrowserBackend(self.browser))
             seen={};attempt=None;model_steps=0
             for step in range(300):
                 if self.cancelled(i,t['id']):raise model.Cancelled()
@@ -125,12 +141,20 @@ class AgentRunner:
                     self.block(i,t,owner,'login','Sign in in the visible Job Hunter browser, then press Resume. Your saved answers and documents are retained.',obs);return
                 if obs.get('captcha_present') and t['kind'] in ('submit','verify'):
                     self.block(i,t,owner,'captcha','Complete the CAPTCHA in the visible Job Hunter browser, then press Resume.',obs);return
+                if t['kind']=='verify':
+                    receipt=adapters.confirmation(obs,ctx['job'])
+                    attempt=db.one("SELECT * FROM submission_attempts WHERE application_id=? AND state IN ('uncertain','attempting') ORDER BY started_at DESC LIMIT 1",(t['application_id'],),i)
+                    if receipt and attempt:
+                        evidence={'observed_at':db.now(),'url':obs['url'],'observation':'Employer receipt re-checked in the live browser','confirmation_text':receipt}
+                        db.submission_result(i,t['application_id'],attempt['id'],'confirmed',evidence)
+                        desktop.finish(i,t['id'],owner,{'evidence':evidence,'message':'Employer receipt verified; application recorded as submitted'});return
                 fields=capture(i,t,obs)
-                if t['kind']=='scan_form' and fields:
+                if t['kind']=='scan_form' and fields and adapters.application_form(obs):
+                    unknown=next((e for e in obs['elements'] if e['type']=='combobox' and not e['choices']),None)
+                    if unknown and hasattr(self.browser,'read_choices'):
+                        obs=self.browser.read_choices(obs,unknown['id']);fields=capture(i,t,obs)
                     desktop.finish(i,t['id'],owner,{'evidence':{'url':obs['url'],'fields':len(fields),'revision':obs['revision']},'page_rechecked':True,'message':'Live form questions captured. Review any missing answers in this application.'});return
                 if t['kind'] in ('fill','submit'):
-                    host=urlsplit(ctx['job']['url']).hostname or ''
-                    if any(host==site or host.endswith('.'+site) for site in ('iimjobs.com','hirist.tech','hirist.com','naukri.com')):raise ValueError('This site can replace an account-wide résumé. Use the desktop workflow and verify a recoverable original résumé before uploading or applying.')
                     if urlsplit(obs['url']).hostname!=urlsplit(ctx['job']['url']).hostname:raise ValueError('The application moved to another hostname. Review its actual destination before entering private data.')
                     db.verify_approval(i,t['application_id'],'fill' if t['kind']=='fill' else 'submit')
                 if t['kind']=='fill':
@@ -151,7 +175,7 @@ class AgentRunner:
                             if not chosen:raise ValueError('The approved radio answer no longer matches this form')
                             if not chosen['checked']:obs=self.act(obs,choice,'check',True);changed=True;break
                         elif str(element['value'] or '')!=str(value['value']):
-                            obs=self.act(obs,f['element'],'select' if element['tag']=='select' else 'fill',value['value']);changed=True;break
+                            obs=self.act(obs,f['element'],'select' if element['tag']=='select' or element['type']=='combobox' else 'fill',value['value']);changed=True;break
                     if changed:continue
                     for e in obs['elements']:
                         if e['type']=='file' and not e.get('files'):
@@ -183,7 +207,6 @@ class AgentRunner:
                 validate_click(obs,decision['element'],t['kind'])
                 desktop.checkpoint(i,t['id'],owner,{'step':'browser','message':decision['message'],'url':obs['url'],'page_fingerprint':obs['revision'],'observed_at':db.now()})
                 if t['kind']=='submit':
-                    from . import adapters
                     adapters.require_submission(ctx['job']['url'])
                     fill=db.one("SELECT result FROM tasks WHERE application_id=? AND kind='fill' AND state='completed' ORDER BY updated_at DESC LIMIT 1",(t['application_id'],),i)
                     if not fill or db.unpack(fill['result'],{}).get('evidence',{}).get('manifest_hash')!=db.digest(db.manifest(i,t['application_id'])):raise ValueError('Fill and verify this exact reviewed application before submitting.')
@@ -204,7 +227,12 @@ class AgentRunner:
             if current and current['state']=='working' and current['owner']==owner:
                 self.block(i,t,owner,'site',str(e),obs)
             elif current and current['state']=='waiting_agent':db.task_update(i,t['id'],state='waiting_user',error=str(e),progress=str(e))
-        finally:db.release(i+':'+t['id']+':'+owner)
+        finally:
+            if resume_transaction:
+                try:resume_accounts.restore(resume_transaction,resume_accounts.BrowserBackend(self.browser))
+                except Exception as error:
+                    db.task_update(i,t['id'],state='waiting_user',lease_until=None,progress=str(error),error=str(error))
+            db.release(i+':'+t['id']+':'+owner)
     def act(self,obs,index,action,value=None,file=None):
         try:return self.browser.act(obs,index,action,value,file)
         except StalePage:return self.browser.observe()

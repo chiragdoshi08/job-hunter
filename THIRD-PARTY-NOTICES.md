@@ -6,6 +6,7 @@ Job Hunter source is MIT-licensed. The Mac build includes independently licensed
 - Playwright 1.63.0 and its driver: Apache License 2.0; bundled license files retained.
 - Chromium: its BSD-style license and included third-party licenses; original `ABOUT`, `LICENSE` and other license files retained in the browser distribution.
 - pypdf 6.19.0: BSD 3-Clause license; bundled package license retained.
+- pypdfium2 5.13.0: Apache-2.0 or BSD-3-Clause; PDFium's BSD-style license and third-party notices are retained in the package.
 - Python 3.14: Python Software Foundation license; bundled runtime terms retained.
 - PyInstaller 6.22.3: GPL with an exception permitting distribution of generated application bundles under the application's license. See https://pyinstaller.org/en/stable/license.html.
 

@@ -6,11 +6,12 @@ from urllib.parse import urlsplit,parse_qs,quote
 from . import application_answers,db,sources,desktop,backup,questions
 from . import addressing,sharing,identities,browser_sessions,reviews
 from .worker import Runner,auth_status,clean_env,codex_binary
-from . import onboarding,goals,adapters
+from . import onboarding,goals,adapters,notifications,resume_accounts
 
 RUNNER=None
 AGENT=None
 LOGIN_PROCESS=None
+NOTIFIER=None
 BOOTSTRAP={}
 CSRF=secrets.token_urlsafe(32)
 PORT=8766
@@ -73,6 +74,8 @@ class Handler(BaseHTTPRequestHandler):
         if path=='/api/identities':return self.send(200,[identities.setup(i) for i in db.IDENTITIES])
         if path=='/api/sources':return self.send(200,db.rows('SELECT * FROM sources ORDER BY kind,name'))
         if path=='/api/accounts':return self.send(200,db.rows('SELECT * FROM accounts ORDER BY site'))
+        if path=='/api/notifications':return self.send(200,notifications.status())
+        if path=='/api/resume-accounts':return self.send(200,{'config':db.get_setting('resume_accounts',{}),'pending':resume_accounts.pending(),'check':db.get_setting('resume_recovery_check',{})})
         if path=='/api/backups':return self.send(200,[{'name':p.name,'size':p.stat().st_size} for p in sorted((db.DATA.parent/'backups').glob('*.zip'),reverse=True)])
         if path.startswith('/api/backup/'):
             name=path.rsplit('/',1)[-1]
@@ -128,6 +131,13 @@ class Handler(BaseHTTPRequestHandler):
             body=json.loads(self.rfile.read(length) or '{}');self.post(urlsplit(self.path).path,body)
         except Exception as e:self.error(e)
     def post(self,path,b):
+        if path=='/api/notifications':
+            if b.get('action')=='configure':return self.send(200,notifications.configure(b.get('enabled') is True))
+            if b.get('action')=='test':
+                if not notifications.status()['enabled']:raise ValueError('Enable phone alerts first')
+                notifications.enqueue('test:'+db.uid(),'Job Hunter connected','Phone alerts are connected. Open Job Hunter to review your saved applications.')
+                return self.send(200,{'queued':True})
+            raise ValueError('Unknown notification action')
         if path=='/api/agent':
             global LOGIN_PROCESS
             action=b.get('action');i=b.get('identity')
@@ -137,18 +147,22 @@ class Handler(BaseHTTPRequestHandler):
                     with (db.DATA/'login.log').open('w') as output:
                         LOGIN_PROCESS=subprocess.Popen([codex_binary(),'login'],stdout=output,stderr=output,env=clean_env(),cwd=db.DATA)
                 return self.send(200,{'started':True})
-            if action in ('browser-check','inference-check','open-browser','show-task'):
+            if action in ('browser-check','inference-check','open-browser','show-task','drive-check','resume-recovery'):
                 if AGENT is None:raise ValueError('Restart Job Hunter to connect the local agent')
                 if action=='show-task':
                     desktop.task(i,b['id']);AGENT.commands.put(('show-task',(i,b['id'])))
                 elif action=='open-browser':
                     sources.public_url(b['url']);AGENT.open(b['url'])
+                elif action=='resume-recovery':AGENT.commands.put(('resume-recovery',b['site']))
+                elif action=='drive-check':
+                    db.set_setting('drive_check',{'running':True,'observed_at':db.now()});AGENT.commands.put(('drive-check',None))
                 else:
                     key='browser_check' if action=='browser-check' else 'inference_check'
                     db.set_setting(key,{'running':True,'observed_at':db.now()})
                     AGENT.commands.put(('check' if action=='browser-check' else 'inference',None))
                 return self.send(200,{'started':True})
             if action=='enable-site':return self.send(200,adapters.enable(b))
+            if action=='resume-account':return self.send(200,resume_accounts.configure(b))
             if action=='mode':
                 if b.get('mode') not in ('local_agent','desktop'):raise ValueError('Choose an execution mode')
                 db.set_setting('execution_mode',b['mode']);return self.send(200,{'ok':True})
@@ -374,7 +388,7 @@ class Handler(BaseHTTPRequestHandler):
         return self.error('Not found',404)
 
 def serve(port=8766):
-    global RUNNER,AGENT,PORT,FIXTURE
+    global RUNNER,AGENT,PORT,FIXTURE,NOTIFIER
     os.umask(0o077);db.DATA.mkdir(parents=True,exist_ok=True,mode=0o700)
     service_lock=(db.DATA/'service.lock').open('a')
     try:
@@ -392,6 +406,7 @@ def serve(port=8766):
         except OSError:continue
     else:raise RuntimeError('No free local port in the selected range')
     db.DATA.joinpath('server.pid').write_text(str(os.getpid()));db.DATA.joinpath('port').write_text(str(PORT))
+    (db.DATA/'stop.request').unlink(missing_ok=True)
     # A local launcher creates one-use connection links via a protected owner-only file.
     def link_loop():
         while True:
@@ -401,13 +416,22 @@ def serve(port=8766):
                     token=path.read_text().strip();path.unlink()
                     if re.fullmatch('[A-Za-z0-9_-]{32,100}',token):BOOTSTRAP[token]=time.time()+120
                 except OSError:pass
+            stop_request=db.DATA/'stop.request'
+            if stop_request.exists():
+                stop_request.unlink(missing_ok=True);shutdown();return
             time.sleep(.1)
     threading.Thread(target=link_loop,daemon=True).start()
     RUNNER=Runner();RUNNER.start()
     from .agent import AgentRunner
     AGENT=AgentRunner();AGENT.start()
+    NOTIFIER=notifications.Notifier();NOTIFIER.start()
     def shutdown(*_):
-        AGENT.stop();RUNNER.stop();threading.Thread(target=s.shutdown,daemon=True).start()
+        AGENT.stop();RUNNER.stop();NOTIFIER.stop()
+        # Let the browser worker restore an account-wide résumé before closing.
+        def finish_shutdown():
+            if AGENT.thread:AGENT.thread.join(timeout=90)
+            threading.Thread(target=s.shutdown,daemon=True).start()
+        threading.Thread(target=finish_shutdown,daemon=True).start()
     signal.signal(signal.SIGTERM,shutdown);signal.signal(signal.SIGINT,shutdown)
     print(f'Job Hunter listening at http://127.0.0.1:{PORT}',flush=True)
     try:s.serve_forever(poll_interval=.3)

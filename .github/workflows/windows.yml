@@ -1,0 +1,31 @@
+name: Windows installer
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, complete-workflows]
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements.txt pyinstaller==6.22.3
+      - run: python -m playwright install chromium
+      - run: python -m unittest discover -s tests -q
+        env:
+          JOB_HUNTER_BROWSER_TESTS: '1'
+      - run: python scripts/build_windows.py --browsers "$env:LOCALAPPDATA/ms-playwright" --dist dist --work build
+      - run: python scripts/smoke_bundle.py --executable "dist/Job Hunter/Job Hunter.exe"
+      - name: Install and verify
+        run: |
+          $installer = Resolve-Path "dist/Job-Hunter-0.3.0-Windows-Setup.exe"
+          Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART" -Wait
+          python scripts/smoke_bundle.py --executable "$env:LOCALAPPDATA/Programs/Job Hunter/Job Hunter.exe"
+          Start-Process "$env:LOCALAPPDATA/Programs/Job Hunter/unins000.exe" -ArgumentList "/VERYSILENT" -Wait
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Job-Hunter-0.3.0-Windows
+          path: dist/Job-Hunter-0.3.0-Windows-Setup.exe
+          retention-days: 30
